@@ -30,7 +30,7 @@ import os.log
 /// Usa el macro `@Observable` (iOS 17+) para integración nativa con SwiftUI.
 /// Para observers en actores de Swift usa `stateStream()`.
 @Observable
-public final class ThermalGovernor {
+public final class ThermalGovernor: NSObject, ObservableObject {
 
     // MARK: - Singleton
 
@@ -40,7 +40,7 @@ public final class ThermalGovernor {
 
     /// Estado térmico actual del dispositivo.
     /// `.nominal` → `.fair` → `.serious` → `.critical`
-    public private(set) var thermalState: ProcessInfo.ThermalState = .nominal
+    @Published public private(set) var thermalState: ProcessInfo.ThermalState = .nominal
 
     // MARK: - Derived Policies (computed; SwiftUI observa automáticamente)
 
@@ -127,8 +127,9 @@ public final class ThermalGovernor {
     private let logger = Logger(subsystem: "com.purgatorio.app", category: "ThermalGovernor")
     private var observerTask: Task<Void, Never>?
 
-    private init() {
-        thermalState = ProcessInfo.processInfo.thermalState
+    private override init() {
+        super.init()
+        self.thermalState = ProcessInfo.processInfo.thermalState
         startObserving()
         logger.info("ThermalGovernor inicializado. Estado inicial: \(self.thermalState.debugDescription)")
     }

@@ -344,7 +344,7 @@ public actor GoogleOAuthService {
         }
     }
 
-    private func loadTokensFromKeychain() -> OAuthTokens? {
+    nonisolated private func loadTokensFromKeychain() -> OAuthTokens? {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: keychainService,

@@ -252,13 +252,14 @@ public actor PhotoProviderActor {
     public func authorizationStateStream() -> AsyncStream<PhotoLibraryAuthState> {
         AsyncStream { [weak self] continuation in
             guard let self else { continuation.finish(); return }
-            Task {
-                await self.storeAuthContinuation(continuation)
-                let state = await self.currentAuthState()
+            Task { [weak self] in
+                await self?.storeAuthContinuation(continuation)
+                let state = await self?.currentAuthState() ?? .notDetermined
                 continuation.yield(state)
                 if state == .notDetermined {
-                    let new = await self.requestAuthorization()
-                    continuation.yield(new)
+                    if let new = await self?.requestAuthorization() {
+                        continuation.yield(new)
+                    }
                 }
             }
         }
@@ -308,7 +309,7 @@ public actor PhotoProviderActor {
     public func assetStream() -> AsyncStream<PhotoAsset> {
         AsyncStream { [weak self] continuation in
             guard let self else { continuation.finish(); return }
-            Task { await self.storeAssetContinuation(continuation) }
+            Task { [weak self] in await self?.storeAssetContinuation(continuation) }
         }
     }
 
@@ -369,7 +370,7 @@ public actor PhotoProviderActor {
     ) async -> DownsampledImageResult {
         let effectiveScale = scale ?? screenScale
         let pixelSize = CGSize(width: targetSize.width * effectiveScale,
-                               height: targetSize.height * scale)
+                               height: targetSize.height * effectiveScale)
 
         guard let phAsset = PHAsset.fetchAssets(
             withLocalIdentifiers: [asset.localIdentifier], options: nil

@@ -93,7 +93,7 @@ public struct PhotoCardView: View {
     private var debugOverlay: some View {
         VStack(spacing: 4) {
             Text("Asset \(viewModel.currentIndex + 1) / \(viewModel.assets.count)")
-            if viewModel.authState == .limited {
+            if case .limited = viewModel.authState {
                 Label("Acceso Limitado", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
             }

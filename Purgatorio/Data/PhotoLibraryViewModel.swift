@@ -119,7 +119,7 @@ public final class PhotoLibraryViewModel: ObservableObject {
     @Published public var activeMilestone: MilestoneEvent?
 
     /// `true` tras terminar la sesión → muestra pantalla de resumen.
-    @Published public private(set) var showSessionSummary: Bool = false
+    @Published public var showSessionSummary: Bool = false
 
     // MARK: - Dependencies
 
@@ -506,7 +506,8 @@ public final class PhotoLibraryViewModel: ObservableObject {
         let screenSize = UIScreen.main.bounds.size
 
         if index < assets.count {
-            let result = await provider.loadDownsampledImage(for: assets[index], targetSize: screenSize)
+            let asset = assets[index]
+            let result = await provider.loadDownsampledImage(for: asset, targetSize: screenSize)
             if case .success(let image, _) = result {
                 await MainActor.run { currentImage = image }
             }
@@ -522,7 +523,8 @@ public final class PhotoLibraryViewModel: ObservableObject {
             nextIdx += 1
         }
         if nextIdx < assets.count {
-            let result = await provider.loadDownsampledImage(for: assets[nextIdx], targetSize: screenSize)
+            let asset = assets[nextIdx]
+            let result = await provider.loadDownsampledImage(for: asset, targetSize: screenSize)
             if case .success(let image, _) = result {
                 await MainActor.run { nextImage = image }
             }
