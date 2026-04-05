@@ -43,7 +43,7 @@ public struct SourceSwitcherView: View {
 
         return Button {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                vm.activeSource = source
+                vm.switchSource(to: source)
             }
         } label: {
             HStack(spacing: 6) {

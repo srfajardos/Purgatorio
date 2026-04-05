@@ -79,13 +79,7 @@ public final class PhotoLibraryViewModel: ObservableObject {
     // MARK: - Published State
 
     /// Fuente de datos activa. Cambiarla resetea la sesión completa.
-    @Published public var activeSource: PhotoSourceType = .apple {
-        didSet {
-            guard oldValue != activeSource else { return }
-            resetSession()
-            logger.info("Fuente cambiada: \(oldValue.rawValue) → \(self.activeSource.rawValue)")
-        }
-    }
+    @Published public var activeSource: PhotoSourceType = .apple
 
     /// Estado de permisos de la librería de fotos (solo aplica a Apple).
     @Published public private(set) var authState: PhotoLibraryAuthState = .notDetermined
@@ -207,6 +201,15 @@ public final class PhotoLibraryViewModel: ObservableObject {
         errorMessage  = nil
         showGooglePurgeButton = false
         start()
+    }
+
+    /// Cambia la fuente activa y resetea la sesión. Evita el didSet de activeSource.
+    public func switchSource(to newSource: PhotoSourceType) {
+        guard activeSource != newSource else { return }
+        let oldVal = activeSource
+        activeSource = newSource
+        resetSession()
+        logger.info("Fuente cambiada: \(oldVal.rawValue) → \(self.activeSource.rawValue)")
     }
 
     // MARK: - Public API: Decision Routing
