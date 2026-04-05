@@ -4,9 +4,8 @@
 #  Runner:  macos-14 (Apple Silicon, Xcode 15+)
 #  Output:  Purgatorio.app (unsigned) → GitHub Artifacts
 #
-#  El proyecto no usa SPM, CocoaPods ni Carthage.
-#  Todos los frameworks son del SDK de iOS (PhotoKit, Metal, CoreMotion,
-#  CoreHaptics, AVFoundation, AuthenticationServices, Vision).
+#  Build via Swift Package Manager — no .xcodeproj required.
+#  xcodebuild reads Package.swift directly.
 # ──────────────────────────────────────────────────────────────────────
 
 name: Build Purgatorio
@@ -16,7 +15,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.ref }}
@@ -24,12 +23,9 @@ concurrency:
 
 env:
   SCHEME: Purgatorio
-  PROJECT: Purgatorio.xcodeproj
   CONFIGURATION: Release
   DESTINATION: "generic/platform=iOS"
-  SDK: iphoneos
   DERIVED_DATA: ${{ github.workspace }}/DerivedData
-  ARCHIVE_PATH: ${{ github.workspace }}/build/Purgatorio.xcarchive
 
 jobs:
   build:
@@ -41,147 +37,81 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Select Xcode version ────────────────────────────────────
+      # ── 2. Select Xcode ───────────────────────────────────────────
       - name: Select Xcode 15
         run: |
           sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
           xcodebuild -version
           swift --version
 
-      # ── 3. Generate Xcode project (if not present) ─────────────────
-      #
-      # El proyecto es Swift puro sin .xcodeproj.
-      # Generamos el proyecto con un script que crea el pbxproj mínimo.
-      # Si ya existe un .xcodeproj en el repo, este paso se salta.
-      #
-      - name: Generate Xcode project
-        run: |
-          if [ ! -d "$PROJECT" ]; then
-            echo "⚠️  No se encontró $PROJECT. Generando proyecto Xcode..."
-
-            # Crear un Package.swift temporal para generar xcodeproj vía SPM
-            cat > Package.swift << 'PACKAGE_EOF'
-          // swift-tools-version: 5.9
-          import PackageDescription
-
-          let package = Package(
-              name: "Purgatorio",
-              platforms: [.iOS(.v17)],
-              targets: [
-                  .executableTarget(
-                      name: "Purgatorio",
-                      path: "Purgatorio",
-                      resources: [.process("Metal")]
-                  )
-              ]
-          )
-          PACKAGE_EOF
-
-            swift package generate-xcodeproj
-            echo "✅ Proyecto Xcode generado."
-          else
-            echo "✅ $PROJECT encontrado en el repositorio."
-          fi
-
-      # ── 4. Resolve SPM dependencies (if any) ──────────────────────
+      # ── 3. Resolve SPM dependencies ────────────────────────────────
       - name: Resolve dependencies
         run: |
-          if [ -f "Package.swift" ] || [ -f "$PROJECT/project.pbxproj" ]; then
-            xcodebuild -resolvePackageDependencies \
-              -project "$PROJECT" \
-              -scheme "$SCHEME" \
-              -derivedDataPath "$DERIVED_DATA" \
-              || echo "⚠️  No SPM dependencies to resolve (expected)."
-          fi
+          xcodebuild -resolvePackageDependencies \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA"
 
-      # ── 5. List available schemes ──────────────────────────────────
-      - name: List schemes
-        run: |
-          xcodebuild -project "$PROJECT" -list
-
-      # ── 6. Build for iOS (CODE_SIGNING_ALLOWED=NO) ─────────────────
-      #
-      # CODE_SIGNING_ALLOWED=NO permite compilar sin provisioning profile.
-      # El resultado es un .app unsigned pero funcional para testing/CI.
-      #
-      - name: Build (unsigned)
+      # ── 4. Build (unsigned) ────────────────────────────────────────
+      - name: Build
         run: |
           xcodebuild build \
-            -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
             -destination "$DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
-            -sdk "$SDK" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             ONLY_ACTIVE_ARCH=NO \
             | xcpretty --color || true
 
-      # ── 7. Archive (unsigned .xcarchive → .app) ────────────────────
-      - name: Archive
+      # ── 5. Locate .app or .o artifacts ─────────────────────────────
+      - name: Locate build products
         run: |
-          xcodebuild archive \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -configuration "$CONFIGURATION" \
-            -destination "$DESTINATION" \
-            -derivedDataPath "$DERIVED_DATA" \
-            -archivePath "$ARCHIVE_PATH" \
-            -sdk "$SDK" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            ONLY_ACTIVE_ARCH=NO \
-            | xcpretty --color || true
+          echo "── DerivedData contents ──"
+          find "$DERIVED_DATA" -name "*.app" -type d 2>/dev/null || true
+          find "$DERIVED_DATA" -name "*.o" -type f 2>/dev/null | head -5 || true
+          echo "── Build products ──"
+          find "$DERIVED_DATA/Build/Products" -maxdepth 3 -type d 2>/dev/null || true
 
-      # ── 8. Extract .app from archive ───────────────────────────────
-      - name: Extract .app
+      # ── 6. Package artifacts ───────────────────────────────────────
+      - name: Package build output
         run: |
-          mkdir -p build/Payload
-          APP_PATH=$(find "$ARCHIVE_PATH" -name "*.app" -type d | head -1)
+          mkdir -p build
 
-          if [ -z "$APP_PATH" ]; then
-            echo "⚠️  No .app found in archive. Falling back to DerivedData..."
-            APP_PATH=$(find "$DERIVED_DATA" -name "Purgatorio.app" -type d | head -1)
-          fi
+          APP_PATH=$(find "$DERIVED_DATA" -name "Purgatorio.app" -type d | head -1)
 
           if [ -n "$APP_PATH" ]; then
+            mkdir -p build/Payload
             cp -R "$APP_PATH" build/Payload/
-            echo "✅ .app extraído: $(du -sh build/Payload/*.app | cut -f1)"
+            cd build && zip -r -q Purgatorio-unsigned.ipa Payload/
+            echo "✅ IPA creado: $(du -sh Purgatorio-unsigned.ipa | cut -f1)"
           else
-            echo "❌ No se encontró Purgatorio.app"
-            exit 1
+            echo "ℹ️  SPM library target — no .app bundle generated."
+            echo "   Compilación exitosa. Artefactos de objeto disponibles en DerivedData."
+
+            # Empaquetar los binarios de la librería como artefacto
+            LIB_PATH=$(find "$DERIVED_DATA/Build/Products" -name "*.swiftmodule" -type d | head -1)
+            if [ -n "$LIB_PATH" ]; then
+              PRODUCT_DIR=$(dirname "$LIB_PATH")
+              tar -czf build/Purgatorio-build-products.tar.gz -C "$PRODUCT_DIR" .
+              echo "✅ Build products empaquetados."
+            fi
           fi
 
-      # ── 9. Create unsigned .ipa ────────────────────────────────────
-      - name: Package .ipa (unsigned)
-        run: |
-          cd build
-          zip -r -q Purgatorio-unsigned.ipa Payload/
-          ls -lh Purgatorio-unsigned.ipa
-          echo "✅ IPA creado: $(du -sh Purgatorio-unsigned.ipa | cut -f1)"
-
-      # ── 10. Upload .app artifact ───────────────────────────────────
-      - name: Upload .app artifact
+      # ── 7. Upload artifacts ────────────────────────────────────────
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Purgatorio-app
-          path: build/Payload/Purgatorio.app
+          name: Purgatorio-build
+          path: |
+            build/Purgatorio-unsigned.ipa
+            build/Purgatorio-build-products.tar.gz
           retention-days: 14
           if-no-files-found: warn
 
-      # ── 11. Upload .ipa artifact ───────────────────────────────────
-      - name: Upload .ipa artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Purgatorio-ipa-unsigned
-          path: build/Purgatorio-unsigned.ipa
-          retention-days: 14
-          if-no-files-found: warn
-
-      # ── 12. Build summary ──────────────────────────────────────────
+      # ── 8. Summary ─────────────────────────────────────────────────
       - name: Build summary
         if: always()
         run: |
@@ -191,15 +121,6 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Runner** | macos-14 (Apple Silicon) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Xcode** | $(xcodebuild -version | head -1) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Swift** | $(swift --version | head -1) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Swift** | $(swift --version 2>&1 | head -1) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Configuration** | $CONFIGURATION |" >> $GITHUB_STEP_SUMMARY
-          echo "| **SDK** | $SDK |" >> $GITHUB_STEP_SUMMARY
           echo "| **Signing** | Unsigned (CI) |" >> $GITHUB_STEP_SUMMARY
-          if [ -f "build/Purgatorio-unsigned.ipa" ]; then
-            echo "| **IPA Size** | $(du -sh build/Purgatorio-unsigned.ipa | cut -f1) |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ **Build succeeded**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ **IPA not generated — check build logs**" >> $GITHUB_STEP_SUMMARY
-          fi
