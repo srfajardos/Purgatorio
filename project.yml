@@ -12,3 +12,4 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.srfajardos.Purgatorio
       INFOPLIST_KEY_UILaunchScreen_Generation: YES
       INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+      SWIFT_STRICT_CONCURRENCY: complete

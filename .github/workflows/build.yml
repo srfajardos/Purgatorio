@@ -25,7 +25,7 @@ env:
   SCHEME: Purgatorio
   CONFIGURATION: Release
   DESTINATION: "generic/platform=iOS"
-  DERIVED_DATA: ${{ github.workspace }}/DerivedData
+  DERIVED_DATA: ${{ github.workspace }}/build
 
 jobs:
   build:
@@ -77,36 +77,16 @@ jobs:
       # ── 6. Package artifacts ───────────────────────────────────────
       - name: Package build output
         run: |
-          mkdir -p build
-
-          APP_PATH=$(find "$DERIVED_DATA" -name "Purgatorio.app" -type d | head -1)
-
-          if [ -n "$APP_PATH" ]; then
-            mkdir -p build/Payload
-            cp -R "$APP_PATH" build/Payload/
-            cd build && zip -r -q Purgatorio-unsigned.ipa Payload/
-            echo "✅ IPA creado: $(du -sh Purgatorio-unsigned.ipa | cut -f1)"
-          else
-            echo "ℹ️  SPM library target — no .app bundle generated."
-            echo "   Compilación exitosa. Artefactos de objeto disponibles en DerivedData."
-
-            # Empaquetar los binarios de la librería como artefacto
-            LIB_PATH=$(find "$DERIVED_DATA/Build/Products" -name "*.swiftmodule" -type d | head -1)
-            if [ -n "$LIB_PATH" ]; then
-              PRODUCT_DIR=$(dirname "$LIB_PATH")
-              tar -czf build/Purgatorio-build-products.tar.gz -C "$PRODUCT_DIR" .
-              echo "✅ Build products empaquetados."
-            fi
-          fi
+          mkdir -p build/Payload
+          cp -R "DerivedData/Build/Products/Release-iphoneos/Purgatorio.app" build/Payload/
+          cd build && zip -r Purgatorio-unsigned.ipa Payload
 
       # ── 7. Upload artifacts ────────────────────────────────────────
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Purgatorio-build
-          path: |
-            build/Purgatorio-unsigned.ipa
-            build/Purgatorio-build-products.tar.gz
+          path: build/Purgatorio-unsigned.ipa
           retention-days: 14
           if-no-files-found: warn
 

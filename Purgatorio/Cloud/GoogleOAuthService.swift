@@ -121,8 +121,10 @@ public actor GoogleOAuthService {
 
     // MARK: - Init
 
-    public init() {
-        // Intentar restaurar tokens del Keychain al iniciar
+    public init() {}
+
+    /// Restaura los tokens de forma segura y aislada en el actor.
+    public func restoreSession() async {
         cachedTokens = loadTokensFromKeychain()
         if cachedTokens != nil {
             logger.info("Tokens restaurados del Keychain.")
