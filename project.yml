@@ -1,0 +1,14 @@
+name: Purgatorio
+options:
+  bundleIdPrefix: com.srfajardos
+targets:
+  Purgatorio:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Purgatorio
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.srfajardos.Purgatorio
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

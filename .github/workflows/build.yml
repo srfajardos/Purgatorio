@@ -44,18 +44,18 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # ── 3. Resolve SPM dependencies ────────────────────────────────
-      - name: Resolve dependencies
+      # ── 3. Generation (XcodeGen) ───────────────────────────────────
+      - name: Generate Xcode Project
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -scheme "$SCHEME" \
-            -destination "$DESTINATION" \
-            -derivedDataPath "$DERIVED_DATA"
+          brew install xcodegen
+          xcodegen generate
 
       # ── 4. Build (unsigned) ────────────────────────────────────────
       - name: Build
         run: |
+          set -o pipefail
           xcodebuild build \
+            -project Purgatorio.xcodeproj \
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
             -destination "$DESTINATION" \
@@ -63,8 +63,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            ONLY_ACTIVE_ARCH=NO \
-            | xcpretty --color || true
+            ONLY_ACTIVE_ARCH=NO | xcpretty --color
 
       # ── 5. Locate .app or .o artifacts ─────────────────────────────
       - name: Locate build products
