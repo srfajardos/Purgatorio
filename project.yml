@@ -9,10 +9,11 @@ targets:
     sources:
       - path: Purgatorio
     info:
-      path: Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSPhotoLibraryUsageDescription: "Purgatorio necesita acceso a tus fotos para analizarlas y ejecutar el motor de destrucción."
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.srfajardos.Purgatorio
-      INFOPLIST_KEY_UILaunchScreen_Generation: YES
-      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Purgatorio necesita acceso a tus fotos para el motor de destrucción."
       SWIFT_STRICT_CONCURRENCY: complete
