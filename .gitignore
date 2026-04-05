@@ -6,6 +6,10 @@ DerivedData/
 *.xcarchive
 *.ipa
 
+## XcodeGen (generated from project.yml)
+Purgatorio.xcodeproj/
+Purgatorio/Info.plist
+
 ## Xcode user-specific files
 xcuserdata/
 *.xcworkspace/xcuserdata/

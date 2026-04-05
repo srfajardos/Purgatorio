@@ -9,6 +9,7 @@ targets:
     sources:
       - path: Purgatorio
     info:
+      path: Purgatorio/Info.plist
       properties:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
