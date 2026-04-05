@@ -170,7 +170,11 @@ public struct RescueButton: View {
 // MARK: - Preview
 
 #Preview {
-    VStack(spacing: 20) {
+    let container = try! PurgatorioQueueManager.makeContainer(inMemoryOnly: true)
+    let queue = PurgatorioQueueManager(container: container)
+    let vm = PhotoLibraryViewModel(queue: queue)
+
+    return VStack(spacing: 20) {
         SourceSwitcherView()
         Spacer()
         RescueButton()
@@ -178,4 +182,6 @@ public struct RescueButton: View {
     }
     .padding()
     .background(Color(.systemBackground))
+    .environmentObject(vm)
 }
+
