@@ -130,7 +130,10 @@ public actor PurgatoryBatchUploader {
     /// Stream de estados del uploader.
     public func stateStream() -> AsyncStream<UploadState> {
         AsyncStream { [weak self] continuation in
-            Task { await self?.storeStateContinuation(continuation) }
+            Task { [weak self] in 
+                guard let self = self else { return }
+                await self.storeStateContinuation(continuation) 
+            }
         }
     }
 
@@ -143,7 +146,7 @@ public actor PurgatoryBatchUploader {
     public func startUpload() {
         uploadTask?.cancel()
         uploadTask = Task { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
             do {
                 try await self.performUpload()
             } catch is CancellationError {

@@ -251,7 +251,7 @@ public actor PhotoProviderActor {
     /// Stream de estado de autorización. Emite al menos un valor inmediatamente.
     public func authorizationStateStream() -> AsyncStream<PhotoLibraryAuthState> {
         AsyncStream { [weak self] continuation in
-            guard let self else { continuation.finish(); return }
+            guard let self = self else { continuation.finish(); return }
             Task { [weak self] in
                 await self?.storeAuthContinuation(continuation)
                 let state = await self?.currentAuthState() ?? .notDetermined
@@ -273,7 +273,10 @@ public actor PhotoProviderActor {
         return await withCheckedContinuation { continuation in
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
                 let state = PhotoLibraryAuthState(from: status)
-                Task { await self?.authContinuation?.yield(state) }
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    await self.authContinuation?.yield(state)
+                }
                 continuation.resume(returning: state)
             }
         }
@@ -308,7 +311,7 @@ public actor PhotoProviderActor {
 
     public func assetStream() -> AsyncStream<PhotoAsset> {
         AsyncStream { [weak self] continuation in
-            guard let self else { continuation.finish(); return }
+            guard let self = self else { continuation.finish(); return }
             Task { [weak self] in await self?.storeAssetContinuation(continuation) }
         }
     }
@@ -582,8 +585,7 @@ public actor PhotoProviderActor {
                 options: lookaheadRequestOptions
             )
             logger.debug(
-                "Lookahead [\(index)…\(windowEnd)] velocity=\(self.userVelocity) " +
-                "lookahead=\(self.dynamicLookaheadCount)"
+                "Lookahead [\(index)…\(windowEnd)] velocity=\(self.userVelocity) lookahead=\(self.dynamicLookaheadCount)"
             )
         }
         cachedIdentifiers = newWindow
@@ -595,7 +597,7 @@ public actor PhotoProviderActor {
 
         if priorityEnd > index {
             Task.detached(priority: .utility) { [weak self] in
-                guard let self else { return }
+                guard let self = self else { return }
                 for i in (index + 1) ... priorityEnd {
                     guard let id = capturedResult?.object(at: i).localIdentifier else { continue }
                     _ = await self.loadTexture(identifier: id, targetSize: capturedSize)

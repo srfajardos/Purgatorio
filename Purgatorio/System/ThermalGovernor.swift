@@ -29,7 +29,7 @@ import os.log
 ///
 /// Usa el macro `@Observable` (iOS 17+) para integración nativa con SwiftUI.
 /// Para observers en actores de Swift usa `stateStream()`.
-@Observable
+
 public final class ThermalGovernor: NSObject, ObservableObject {
 
     // MARK: - Singleton

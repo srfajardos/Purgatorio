@@ -17,7 +17,7 @@ import SwiftUI
 /// el `DestructiveSwipeView` que aplicará los shaders de Metal.
 public struct PhotoCardView: View {
 
-    @StateObject private var viewModel = PhotoLibraryViewModel(queue: PurgatorioQueueManager())
+    @StateObject private var viewModel = PhotoLibraryViewModel(queue: PurgatorioQueueManager(container: try! PurgatorioQueueManager.makeContainer(inMemoryOnly: true)))
 
     // Tamaño del card = pantalla completa (ajustar en DestructiveSwipeView)
     private var cardSize: CGSize { UIScreen.main.bounds.size }
