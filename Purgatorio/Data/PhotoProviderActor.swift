@@ -83,21 +83,30 @@ public struct PhotoPair: Sendable {
     }
 }
 
+/// Wrapper estructural @unchecked Sendable para texturas de Metal.
+/// Seguro dado que las texturas inicializadas no mutan su memoria backend de forma conflictiva.
+public struct SendableTexture: @unchecked Sendable {
+    public let texture: any MTLTexture
+    public init(_ texture: any MTLTexture) {
+        self.texture = texture
+    }
+}
+
 /// Par de texturas Metal — el doble buffer primario del pipeline de renderizado.
 ///
 /// `@unchecked Sendable` es seguro: `MTLTexture` es thread-safe por diseño de Metal.
 /// Las instancias son inmutables tras la creación.
 public final class TexturePair: @unchecked Sendable {
     public let idA: String
-    public let textureA: (any MTLTexture)?
+    public let textureA: SendableTexture?
     public let idB: String
-    public let textureB: (any MTLTexture)?
+    public let textureB: SendableTexture?
 
     /// `true` cuando ambas texturas están en memoria GPU y listas para el shader.
     public var isComplete: Bool { textureA != nil && textureB != nil }
 
-    init(idA: String, textureA: (any MTLTexture)?,
-         idB: String, textureB: (any MTLTexture)?) {
+    init(idA: String, textureA: SendableTexture?,
+         idB: String, textureB: SendableTexture?) {
         self.idA = idA; self.textureA = textureA
         self.idB = idB; self.textureB = textureB
     }
@@ -336,7 +345,11 @@ public actor PhotoProviderActor {
         let size = dynamicTextureSize
         async let texA = loadTexture(identifier: idA, targetSize: size)
         async let texB = loadTexture(identifier: idB, targetSize: size)
-        return await TexturePair(idA: idA, textureA: texA, idB: idB, textureB: texB)
+        
+        let sendableA = await texA.map(SendableTexture.init)
+        let sendableB = await texB.map(SendableTexture.init)
+        
+        return await TexturePair(idA: idA, textureA: sendableA, idB: idB, textureB: sendableB)
     }
 
     // MARK: - Public API: Single Texture (para DestructiveSwipeView)
@@ -355,10 +368,11 @@ public actor PhotoProviderActor {
     public func loadTexture(
         for asset: PhotoAsset,
         targetSize: CGSize? = nil
-    ) async -> (any MTLTexture)? {
+    ) async -> SendableTexture? {
         let size = targetSize ?? CGSize(width: screenBounds.width * screenScale,
                                         height: screenBounds.height * screenScale)
-        return await loadTexture(identifier: asset.localIdentifier, targetSize: size)
+        let tex = await loadTexture(identifier: asset.localIdentifier, targetSize: size)
+        return tex.map(SendableTexture.init)
     }
 
     // MARK: - Public API: UIImage Pipeline (ruta de análisis — SimilarityEngine)

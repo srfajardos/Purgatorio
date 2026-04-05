@@ -170,10 +170,10 @@ public struct DestructiveSwipeView: View {
                     let assets     = await MainActor.run { vm.assets }
                     guard let asset = assets[safe: currentIdx] else { return }
 
-                    if let texture = await provider.loadTexture(for: asset) {
+                    if let texWrapper = await provider.loadTexture(for: asset) {
                         let frame = await MainActor.run { cardGlobalFrame }
                         await MainActor.run {
-                            GlobalShredderManager.shared.prepare(texture: texture, from: frame)
+                            GlobalShredderManager.shared.prepare(texture: texWrapper.texture, from: frame)
                         }
                     }
                 },
@@ -187,8 +187,8 @@ public struct DestructiveSwipeView: View {
 
     private func computeQualityProfile() async {
         guard let asset = vm.assets[safe: vm.currentIndex] else { return }
-        if let texture = await provider.loadTexture(for: asset) {
-            let profile = PhotoQualityProfile.from(texture: texture)
+        if let texWrapper = await provider.loadTexture(for: asset) {
+            let profile = PhotoQualityProfile.from(texture: texWrapper.texture)
             await MainActor.run { qualityProfile = profile }
         }
     }
@@ -211,16 +211,16 @@ public struct DestructiveSwipeView: View {
 
             let targetSize = UIScreen.main.bounds.size
             let asset = vm.assets[vm.currentIndex]
-            let texture = await provider.loadTexture(for: asset, targetSize: targetSize)
+            let texWrapper = await provider.loadTexture(for: asset, targetSize: targetSize)
 
             await MainActor.run {
                 // 1. Ocultar carta SwiftUI
                 withAnimation(.easeOut(duration: 0.05)) { cardOpacity = 0 }
 
                 // 2. Metal shredder — UX idéntica para Apple y Google
-                if let texture {
+                if let texWrapper {
                     GlobalShredderManager.shared.triggerExplosion(
-                        texture: texture, from: cardGlobalFrame, velocity: norm
+                        texture: texWrapper.texture, from: cardGlobalFrame, velocity: norm
                     )
                 }
 

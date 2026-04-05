@@ -458,7 +458,7 @@ public actor PurgatoryBatchUploader {
         while true {
             try Task.checkCancellation()
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await performNetworkRequest(request)
 
             guard let http = response as? HTTPURLResponse else {
                 return (data, response)
@@ -486,6 +486,12 @@ public actor PurgatoryBatchUploader {
 
             return (data, response)
         }
+    }
+
+    // MARK: - Private: Nonisolated Network 
+    
+    nonisolated private func performNetworkRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await URLSession.shared.data(for: request)
     }
 
     // MARK: - Private: Checkpoint Persistence

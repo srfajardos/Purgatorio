@@ -234,7 +234,7 @@ public actor GoogleOAuthService {
 
         request.httpBody = body.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await performNetworkRequest(request)
         guard let http = response as? HTTPURLResponse else {
             throw GoogleOAuthError.invalidResponse
         }
@@ -279,7 +279,7 @@ public actor GoogleOAuthService {
 
         request.httpBody = body.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await performNetworkRequest(request)
         guard let http = response as? HTTPURLResponse else {
             throw GoogleOAuthError.invalidResponse
         }
@@ -307,6 +307,12 @@ public actor GoogleOAuthService {
 
         logger.info("Token refreshed. Nuevo expires_in=\(merged.expiresIn)s")
         return merged
+    }
+
+    // MARK: - Private: Nonisolated Network
+    
+    nonisolated private func performNetworkRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await URLSession.shared.data(for: request)
     }
 
     // MARK: - Private: Token Storage (sync, en el executor del actor)
