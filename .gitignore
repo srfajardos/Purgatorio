@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────
+#  Xcode
+# ──────────────────────────────────────────────
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+
+## Xcode user-specific files
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+## Xcode playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# ──────────────────────────────────────────────
+#  Swift Package Manager
+# ──────────────────────────────────────────────
+.build/
+.swiftpm/
+Package.resolved
+Packages/
+
+# ──────────────────────────────────────────────
+#  CocoaPods (por si se añade en el futuro)
+# ──────────────────────────────────────────────
+Pods/
+
+# ──────────────────────────────────────────────
+#  macOS
+# ──────────────────────────────────────────────
+.DS_Store
+*.swp
+*~
+._*
+
+# ──────────────────────────────────────────────
+#  App-specific
+# ──────────────────────────────────────────────
+*.app
+*.dSYM.zip
+*.dSYM
+
+# ──────────────────────────────────────────────
+#  Fastlane
+# ──────────────────────────────────────────────
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# ──────────────────────────────────────────────
+#  Secrets / credentials (nunca comitear)
+# ──────────────────────────────────────────────
+*.p12
+*.mobileprovision
+*.pem
+GoogleService-Info.plist

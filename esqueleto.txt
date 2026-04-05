@@ -1,0 +1,35 @@
+Esqueleto General de la Arquitectura: App de Destrucción Fotográfica
+1. Objetivos Técnicos Principales
+Hiper-Rendimiento (120fps) y Cero Latencia: Renderizado de la UI en SwiftUI, delegando las animaciones destructivas (fragmentación/trituración) a shaders personalizados en Metal para evitar caídas de frames y sobrecarga del hilo principal durante la destrucción masiva.
+
+Gestión de Memoria Agresiva: Uso obligatorio de autoreleasepool en bucles de carga de la galería. Implementación estricta de downsampling mediante ImageIO (CGImageSourceCreateThumbnailAtIndex) para decodificar únicamente los píxeles exactos requeridos por la resolución de la pantalla.
+
+Concurrencia Segura y Persistencia Local: Swift Concurrency (async/await, Task, Actors) para mover todo el I/O y procesamiento de CoreML. Uso de SwiftData o SQLite para mantener una cola de persistencia de las fotos marcadas (estado del Purgatorio), evitando la pérdida del mapeo en caso de un cierre abrupto por falta de memoria (OOM kill).
+
+2. Componentes del Sistema
+A. Capa de Acceso a Datos y Memoria (Data & Memory Layer)
+PhotoProviderActor: Actor responsable de interactuar con PhotoKit. Extrae metadatos y mantiene un Lookahead Cache (pre-carga de las siguientes 3-5 fotos) usando PHCachingImageManager para garantizar un flujo de swipe ininterrumpido.
+
+GarbageStateContainer: Gestor de estado local que almacena los PHObjectIDs (para iOS) o identificadores de Google de la basura temporal antes de ejecutar el borrado masivo o la subida al álbum.
+
+B. Motor de Análisis (Vision / Neural Layer)
+SimilarityEngine: Utiliza algoritmos de Perceptual Hashing (pHash) para detección matemática instantánea de duplicados exactos, y el framework Vision (VNGenerateImageFeaturePrintRequest) para calcular la distancia vectorial y agrupar fotos cuasi-idénticas. Todo se ejecuta en colas userInitiated.
+
+C. Capa de Integración en la Nube (Cloud Purgatory Bridge)
+GooglePhotosOAuthService: Gestiona el flujo de autenticación de forma segura mediante ASWebAuthenticationSession para evitar salir de la aplicación durante el login.
+
+PurgatoryBatchUploader: Proceso que agrupa y envía los IDs al "Álbum Purgatorio" mediante la API REST de Google, implementando retrocesos exponenciales (Exponential Backoff) para respetar los estrictos límites de tasa (Rate Limiting) de la API.
+
+ExecutionRouter: Construye y lanza el Deep Link (googlephotos://album/[ALBUM_ID]) para expulsar al usuario hacia la app nativa de Google Photos obligándolo a vaciar la papelera.
+
+D. Capa de UX/UI Visceral (Presentation Layer)
+DestructiveSwipeView: Implementa DragGesture monitoreando la inercia y la velocidad. Conectado directamente a las rutinas de Metal para renderizar la destrucción física de la tarjeta al cruzar el umbral.
+
+StroboscopicA_B_View: Utiliza CADisplayLink (atado al refresh rate del hardware, soporte ProMotion 120Hz) en lugar de un simple Timer o TimelineView, para garantizar un intercambio de imágenes a 3-4 fps exactos, sin micro-stuttering que arruine la detección visual.
+
+SurvivalTournamentView: Máquina de estados que gestiona el emparejamiento y un temporizador de muerte súbita (2 segundos) mediante un AsyncStream, ejecutando el castigo de borrado automático si el usuario se paraliza.
+
+HapticAudioEngine: Singleton que sincroniza CHHapticEngine (CoreHaptics) para generar vibraciones agudas y texturizadas (crujidos, golpes secos), acoplado a AVAudioEngine para reproducir capas de audio ASMR destructivo sin latencia.
+
+E. Modelo de Negocio (Monetización de Alta Tensión)
+FrictionlessPaywall: Se descartan los anuncios por completo (destruyen la inmersión y la eficiencia cognitiva). Implementación de un modelo Freemium restrictivo: el usuario puede destruir gratis un lote fijo al día. Superado el límite, la UI se bloquea o la velocidad de renderizado de la app se degrada artificialmente, exigiendo una suscripción para recuperar el rendimiento hiper-rápido y el almacenamiento ilimitado.
