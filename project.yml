@@ -8,6 +8,8 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: Purgatorio
+    info:
+      path: Info.plist
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.srfajardos.Purgatorio
       INFOPLIST_KEY_UILaunchScreen_Generation: YES

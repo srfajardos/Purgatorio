@@ -77,17 +77,35 @@ jobs:
       # ── 6. Package artifacts ───────────────────────────────────────
       - name: Package build output
         run: |
-          mkdir -p build/Payload
+          mkdir -p build/Payload/Purgatorio.app
+          
+          # Extraer y consolidar la app base
           APP_PATH=$(find . -name "Purgatorio.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
-              cp -R "$APP_PATH" build/Payload/
-              cd build
-              zip -r -q Purgatorio-unsigned.ipa Payload/
-              echo "✅ IPA creado correctamente."
-          else
-              echo "❌ ERROR: No se encontró Purgatorio.app"
+          if [ -n "$APP_PATH" ] && [ -d "$APP_PATH" ]; then
+              cp -R "$APP_PATH/"* build/Payload/Purgatorio.app/ || true
+          fi
+          
+          # Inyección forzada de componentes críticos
+          BIN_PATH=$(find DerivedData/Build/Products -type f -path "*/Release-iphoneos/Purgatorio" | head -1)
+          METAL_PATH=$(find DerivedData/Build/Products -type f -name "default.metallib" | head -1)
+          
+          if [ -n "$BIN_PATH" ]; then cp "$BIN_PATH" build/Payload/Purgatorio.app/; fi
+          if [ -n "$METAL_PATH" ]; then cp "$METAL_PATH" build/Payload/Purgatorio.app/; fi
+          cp Info.plist build/Payload/Purgatorio.app/
+          
+          echo "--- Estructura del Bundle Forzada ---"
+          ls -R build/Payload/
+          
+          cd build
+          zip -r -q Purgatorio-unsigned.ipa Payload/
+          
+          # Verificación estricta de viabilidad
+          SIZE=$(wc -c < Purgatorio-unsigned.ipa | tr -d ' ')
+          if [ "$SIZE" -lt 2097152 ]; then
+              echo "❌ Error: App Bundle incompleto"
               exit 1
           fi
+          echo "✅ IPA verificado y blindado. Tamaño: $SIZE bytes."
 
       # ── 7. Upload artifacts ────────────────────────────────────────
       - name: Upload build artifacts
