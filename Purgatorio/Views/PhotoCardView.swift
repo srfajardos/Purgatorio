@@ -31,8 +31,10 @@ public struct PhotoCardView: View {
                 ProgressView("Solicitando permisos…")
                     .tint(.white)
 
-            case .denied(let reason), .restricted(let reason):
-                permissionDeniedView(reason: viewModel.errorMessage ?? "Acceso no autorizado.")
+            case .denied(let reason):
+                permissionDeniedView(reason: reason)
+            case .restricted:
+                permissionDeniedView(reason: "Acceso restringido por políticas del sistema.")
 
             case .authorized, .limited:
                 photoStackView
