@@ -128,7 +128,7 @@ public struct PhotoCardView: View {
         .padding(32)
     }
 }
-// Build Final v1.0
+ // Build Final v1.0
 #Preview {
     PhotoCardView()
 }
