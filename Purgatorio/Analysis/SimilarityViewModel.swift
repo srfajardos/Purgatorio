@@ -68,7 +68,7 @@ public final class SimilarityViewModel: ObservableObject {
         analysisProgress = 0
 
         analysisTask = Task { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
             await MainActor.run { self.isAnalyzing = true }
 
             do {
@@ -103,7 +103,7 @@ public final class SimilarityViewModel: ObservableObject {
         let idB = group.assetIDs[1]
 
         Task { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
             // fetchPair garantiza que PHImageManager procesa ambas solicitudes
             // en paralelo y retorna solo cuando ambas están en RAM.
             let pair = await provider.fetchPair(

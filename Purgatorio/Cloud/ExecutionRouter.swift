@@ -21,6 +21,7 @@ import os.log
 
 // MARK: - ExecutionRouter
 
+@MainActor
 public enum ExecutionRouter {
 
     // MARK: - URL Schemes

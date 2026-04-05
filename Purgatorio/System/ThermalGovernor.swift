@@ -117,7 +117,8 @@ public final class ThermalGovernor: NSObject, ObservableObject {
                 self?.removeStreamContinuation(id: id)
             }
             Task { @MainActor [weak self] in
-                self?.stateStreamContinuations[id] = continuation
+                guard let self = self else { return }
+                self.stateStreamContinuations[id] = continuation
             }
         }
     }
@@ -166,7 +167,8 @@ public final class ThermalGovernor: NSObject, ObservableObject {
 
     private func removeStreamContinuation(id: UUID) {
         Task { @MainActor [weak self] in
-            self?.stateStreamContinuations.removeValue(forKey: id)
+            guard let self = self else { return }
+            self.stateStreamContinuations.removeValue(forKey: id)
         }
     }
 }

@@ -23,7 +23,7 @@
 //
 
 import Photos
-import Vision
+@preconcurrency import Vision
 import UIKit
 import os.log
 

@@ -201,8 +201,10 @@ public final class GlobalShredderManager: NSObject, ObservableObject {
 
 extension GlobalShredderManager: MTKViewDelegate {
 
+    @MainActor
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
+    @MainActor
     public func draw(in view: MTKView) {
         guard
             let drawable       = view.currentDrawable,

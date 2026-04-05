@@ -18,7 +18,8 @@
 //
 
 import Photos
-import MetalKit
+@preconcurrency import MetalKit
+@preconcurrency import Metal
 import UIKit
 import os.log
 
