@@ -32,7 +32,6 @@ public struct SessionSummaryView: View {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 44))
                         .foregroundStyle(.red.gradient)
-                        .symbolEffect(.bounce, options: .nonRepeating)
                 }
                 .padding(.top, 24)
 
@@ -159,7 +158,6 @@ public struct MilestoneToast: View {
             Image(systemName: "trophy.fill")
                 .font(.title2)
                 .foregroundStyle(.yellow)
-                .symbolEffect(.bounce, options: .nonRepeating)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("¡Hito: \(event.count) fotos!")

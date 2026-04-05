@@ -122,25 +122,33 @@ public final class TexturePair: @unchecked Sendable {
 /// ```
 public actor PhotoProviderActor {
 
-    // MARK: - Metal Resources (init-time, inmutables → nonisolated seguro)
+    // MARK: - Metal Resources (init-time, inmutables)
 
     /// Dispositivo Metal del sistema. `nil` en simulador sin GPU.
-    private nonisolated(unsafe) let metalDevice: (any MTLDevice)?
+    private let metalDevice: (any MTLDevice)?
 
     /// Loader que sube CGImage al buffer GPU. Hilo-seguro por diseño de MetalKit.
-    private nonisolated(unsafe) let textureLoader: MTKTextureLoader?
+    private let textureLoader: MTKTextureLoader?
 
     // MARK: - Texture LRU Cache
 
     /// Texturas GPU residentes, indexadas por `localIdentifier`.
     private var textureCache: [String: any MTLTexture] = [:]
 
-    /// Cola de acceso más reciente → frente = candidato a evición.
-    private var textureLRUOrder: [String] = []
-
     /// Límite de texturas GPU en cache. Una textura 390×844 BGRA = ~1.3 MB.
     /// 30 texturas ≈ 40 MB — presupuesto conservador para dispositivos con 4 GB RAM.
     private let maxTextureCacheSize: Int
+
+    /// Cola de acceso más reciente → frente = candidato a evición.
+    private var textureLRUOrder: [String] = []
+
+    // MARK: - Screen Metrics (inyectadas desde MainActor en init)
+
+    /// Resolución de pantalla en puntos (ej. 393×852 en iPhone 15 Pro).
+    private let screenBounds: CGSize
+
+    /// Escala de pantalla (ej. 3.0 en dispositivos @3x).
+    private let screenScale: CGFloat
 
     // MARK: - Velocity-Aware Dynamic State
 
@@ -150,33 +158,25 @@ public actor PhotoProviderActor {
     /// Número de assets a pre-cargar. Escala con la velocidad para anticipar el consumo.
     private var dynamicLookaheadCount: Int {
         switch userVelocity {
-        case ..<1:   return lookaheadBase            // Parado/lento: conservador
-        case 1..<3: return min(lookaheadBase * 2, 10)  // Scroll suave
-        case 3..<6: return min(lookaheadBase * 3, 15)  // Scroll moderado
-        default:    return 20                           // Burst / swipe agresivo
+        case ..<1:   return lookaheadBase
+        case 1..<3: return min(lookaheadBase * 2, 10)
+        case 3..<6: return min(lookaheadBase * 3, 15)
+        default:    return 20
         }
     }
 
     /// Tamaño de textura objetivo dinámico. Alta velocidad = menor resolución = mayor throughput.
-    ///
-    /// La reducción de resolución es imperceptible a alta velocidad de swipe
-    /// y elimina cuellos de botella en el bus de memoria GPU.
     private var dynamicTextureSize: CGSize {
-        let bounds = UIScreen.main.bounds
-        let scale  = UIScreen.main.scale
         switch userVelocity {
         case ..<1:
-            // Parado: resolución completa de pantalla (e.g., 1170×2532 en iPhone 14 Pro)
-            return CGSize(width: bounds.width * scale, height: bounds.height * scale)
+            return CGSize(width: screenBounds.width * screenScale,
+                          height: screenBounds.height * screenScale)
         case 1..<3:
-            // Scroll lento: 70% de la resolución nativa
-            return CGSize(width: bounds.width * scale * 0.7,
-                          height: bounds.height * scale * 0.7)
+            return CGSize(width: screenBounds.width * screenScale * 0.7,
+                          height: screenBounds.height * screenScale * 0.7)
         case 3..<6:
-            // Scroll moderado: resolución media fija
             return CGSize(width: 512, height: 768)
         default:
-            // Swipe rápido / burst: baja resolución para mantener 120fps
             return CGSize(width: 256, height: 384)
         }
     }
@@ -221,9 +221,18 @@ public actor PhotoProviderActor {
     /// - Parameters:
     ///   - lookaheadCount: Lookahead base (escala dinámica con velocidad). Default: 5.
     ///   - maxTextureCacheSize: Máximo de texturas GPU en cache LRU. Default: 30.
-    public init(lookaheadCount: Int = 5, maxTextureCacheSize: Int = 30) {
+    ///   - screenBounds: Tamaño de pantalla en puntos. Pasar desde @MainActor.
+    ///   - screenScale: Escala de pantalla (@1x, @2x, @3x). Pasar desde @MainActor.
+    public init(
+        lookaheadCount: Int = 5,
+        maxTextureCacheSize: Int = 30,
+        screenBounds: CGSize = CGSize(width: 393, height: 852),
+        screenScale: CGFloat = 3.0
+    ) {
         self.lookaheadBase       = max(1, lookaheadCount)
         self.maxTextureCacheSize = max(5, maxTextureCacheSize)
+        self.screenBounds        = screenBounds
+        self.screenScale         = screenScale
         self.cachingManager      = PHCachingImageManager()
         self.cachingManager.allowsCachingHighQualityImages = false
 
@@ -233,7 +242,7 @@ public actor PhotoProviderActor {
 
         if device == nil {
             Logger(subsystem: "com.purgatorio.app", category: "PhotoProviderActor")
-                .critical("MTLCreateSystemDefaultDevice() retornó nil — texturas Metal no disponibles.")
+                .critical("MTLCreateSystemDefaultDevice() retornó nil.")
         }
     }
 
@@ -340,9 +349,11 @@ public actor PhotoProviderActor {
     ///   - targetSize: Resolución de la textura. Default: tamaño de pantalla.
     public func loadTexture(
         for asset: PhotoAsset,
-        targetSize: CGSize = UIScreen.main.bounds.size
+        targetSize: CGSize? = nil
     ) async -> (any MTLTexture)? {
-        await loadTexture(identifier: asset.localIdentifier, targetSize: targetSize)
+        let size = targetSize ?? CGSize(width: screenBounds.width * screenScale,
+                                        height: screenBounds.height * screenScale)
+        return await loadTexture(identifier: asset.localIdentifier, targetSize: size)
     }
 
     // MARK: - Public API: UIImage Pipeline (ruta de análisis — SimilarityEngine)
@@ -354,10 +365,10 @@ public actor PhotoProviderActor {
     public func loadDownsampledImage(
         for asset: PhotoAsset,
         targetSize: CGSize,
-        scale: CGFloat = UIScreen.main.scale
+        scale: CGFloat? = nil
     ) async -> DownsampledImageResult {
-
-        let pixelSize = CGSize(width: targetSize.width * scale,
+        let effectiveScale = scale ?? screenScale
+        let pixelSize = CGSize(width: targetSize.width * effectiveScale,
                                height: targetSize.height * scale)
 
         guard let phAsset = PHAsset.fetchAssets(
@@ -397,9 +408,9 @@ public actor PhotoProviderActor {
 
     /// Double buffer de UIImage (ruta de análisis). Mantiene compatibilidad con `SimilarityViewModel`.
     public func fetchPair(idA: String, idB: String, targetSize: CGSize,
-                          scale: CGFloat = UIScreen.main.scale) async -> PhotoPair {
-        let scale = UIScreen.main.scale
-        let pixelSize = CGSize(width: targetSize.width * scale, height: targetSize.height * scale)
+                          scale: CGFloat? = nil) async -> PhotoPair {
+        let effectiveScale = scale ?? screenScale
+        let pixelSize = CGSize(width: targetSize.width * effectiveScale, height: targetSize.height * effectiveScale)
 
         async let resultA = loadUIImage(identifier: idA, targetSize: pixelSize)
         async let resultB = loadUIImage(identifier: idB, targetSize: pixelSize)
@@ -603,8 +614,7 @@ public actor PhotoProviderActor {
     }()
 
     private var lookaheadThumbnailSize: CGSize {
-        let scale = UIScreen.main.scale
-        return CGSize(width: 400 * scale, height: 600 * scale)
+        CGSize(width: 400 * screenScale, height: 600 * screenScale)
     }
 
     // MARK: - Private: State Helpers

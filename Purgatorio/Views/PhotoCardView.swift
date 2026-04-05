@@ -17,7 +17,7 @@ import SwiftUI
 /// el `DestructiveSwipeView` que aplicará los shaders de Metal.
 public struct PhotoCardView: View {
 
-    @StateObject private var viewModel = PhotoLibraryViewModel()
+    @StateObject private var viewModel = PhotoLibraryViewModel(queue: PurgatorioQueueManager())
 
     // Tamaño del card = pantalla completa (ajustar en DestructiveSwipeView)
     private var cardSize: CGSize { UIScreen.main.bounds.size }
@@ -31,7 +31,7 @@ public struct PhotoCardView: View {
                 ProgressView("Solicitando permisos…")
                     .tint(.white)
 
-            case .denied(let reason), .restricted:
+            case .denied(let reason), .restricted(let reason):
                 permissionDeniedView(reason: viewModel.errorMessage ?? "Acceso no autorizado.")
 
             case .authorized, .limited:

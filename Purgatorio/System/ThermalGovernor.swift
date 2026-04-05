@@ -154,8 +154,7 @@ public final class ThermalGovernor {
         thermalState = newState
 
         logger.warning(
-            "Cambio térmico: \(previous.debugDescription) → \(newState.debugDescription). " +
-            "StrobeRate=\(self.targetStrobeRate)Hz Audio=\(self.isAudioEnabled) ML=\(self.isMLEnabled)"
+            "Cambio térmico: \(previous.debugDescription) → \(newState.debugDescription). StrobeRate=\(self.targetStrobeRate)Hz Audio=\(self.isAudioEnabled) ML=\(self.isMLEnabled)"
         )
 
         // Notificar a todos los observers AsyncStream

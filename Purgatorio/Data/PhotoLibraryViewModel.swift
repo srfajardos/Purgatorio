@@ -156,13 +156,17 @@ public final class PhotoLibraryViewModel: ObservableObject {
     ///   - uploader: Uploader de Google Photos (nil si no hay OAuth configurado).
     ///   - oauth: Servicio OAuth de Google (nil si no hay credenciales).
     public init(
-        provider:  PhotoProviderActor    = PhotoProviderActor(),
+        provider:  PhotoProviderActor?   = nil,
         queue:     PurgatorioQueueManager,
         journaler: AtomicJournaler       = .shared,
         uploader:  PurgatoryBatchUploader? = nil,
         oauth:     GoogleOAuthService?   = nil
     ) {
-        self.provider  = provider
+        // Inyectar PhotoProviderActor con métricas de pantalla (@MainActor)
+        self.provider  = provider ?? PhotoProviderActor(
+            screenBounds: UIScreen.main.bounds.size,
+            screenScale:  UIScreen.main.scale
+        )
         self.queue     = queue
         self.journaler = journaler
         self.uploader  = uploader

@@ -118,8 +118,7 @@ public actor IntentPredictor {
             Task { await self.processSample(data.acceleration) }
         }
 
-        logger.info("IntentPredictor: muestreo iniciado a \(Int(1.0 / self.sampleInterval))Hz, " +
-                     "ventana=\(self.windowSize) muestras, umbral=\(self.lateralThreshold)G")
+        logger.info("IntentPredictor: muestreo iniciado a \(Int(1.0 / self.sampleInterval))Hz, ventana=\(self.windowSize) muestras, umbral=\(self.lateralThreshold)G")
     }
 
     /// Detiene el muestreo y libera el sensor.

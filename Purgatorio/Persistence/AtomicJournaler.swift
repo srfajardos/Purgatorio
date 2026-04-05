@@ -161,7 +161,7 @@ public actor AtomicJournaler {
     /// ```
     @MainActor
     public func recoverAndSync(into queue: PurgatorioQueueManager) async {
-        let pending = readPendingEntries()
+        let pending = await readPendingEntries()
         guard !pending.isEmpty else { return }
 
         logger.warning("WAL contiene \(pending.count) IDs no sincronizados. Recuperando…")
