@@ -194,6 +194,13 @@ public final class PhotoLibraryViewModel: ObservableObject {
         }
     }
 
+    /// Re-evalúa la galería si hubo cambios externos en background.
+    public func refreshAppleGallery() {
+        guard activeSource == .apple else { return }
+        logger.info("Refrescando galería Apple por retorno al foreground")
+        resetSession()
+    }
+
     /// Reinicia la sesión para la fuente activa.
     public func resetSession() {
         assetStreamTask?.cancel()
@@ -295,12 +302,22 @@ public final class PhotoLibraryViewModel: ObservableObject {
             sessionStats.rescued = max(0, sessionStats.rescued - 1)
         }
         
-        // Retroceder el cursor visual
+        // Retroceder el cursor visual y forzar la recarga
         currentIndex = lastIndex
+        currentImage = nil // Invalidar inmediatamente para forzar el refresh
+        let targetSize = UIScreen.main.bounds.size
         Task { [weak self] in
             guard let self else { return }
             await provider.didAdvance(to: lastIndex)
-            await loadCurrentAndNext(from: lastIndex)
+            
+            // Forzamos explícitamente la recarga de la imagen actual
+            let result = await provider.loadDownsampledImage(for: prevAsset, targetSize: targetSize)
+            if case .success(let image, _) = result {
+                await MainActor.run { self.currentImage = image }
+            }
+            
+            // Pre-cargamos la siguiente respetando el nuevo estado
+            await loadNext(from: lastIndex)
         }
     }
 

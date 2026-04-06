@@ -22,6 +22,7 @@ public struct SourceSwitcherView: View {
     @EnvironmentObject private var vm: PhotoLibraryViewModel
 
     @Namespace private var animation
+    @State private var showGoogleAlert = false
 
     public init() {}
 
@@ -34,6 +35,14 @@ public struct SourceSwitcherView: View {
         .padding(4)
         .background(.ultraThinMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+        .alert("Google Photos", isPresented: $showGoogleAlert) {
+            Button("Entendido", role: .cancel) {
+                // Revertir a Apple si fuera necesario, aunque ya lo bloqueamos.
+                withAnimation { vm.switchSource(to: .apple) }
+            }
+        } message: {
+            Text("Integración en desarrollo...")
+        }
     }
 
     // MARK: - Private
@@ -42,8 +51,17 @@ public struct SourceSwitcherView: View {
         let isActive = vm.activeSource == source
 
         return Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                vm.switchSource(to: source)
+            if source == .google {
+                showGoogleAlert = true
+                // Opcional: cambiamos visualmente y la alerta lo revierte, o simplemente lo bloqueamos.
+                // Lo cambiamos para cumplir "revierte visualmente":
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    vm.switchSource(to: source)
+                }
+            } else {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    vm.switchSource(to: source)
+                }
             }
         } label: {
             HStack(spacing: 6) {

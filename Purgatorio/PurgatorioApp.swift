@@ -13,6 +13,8 @@ struct PurgatorioApp: App {
     @StateObject private var photoVM: PhotoLibraryViewModel
     @StateObject private var queueManager: PurgatorioQueueManager
     @StateObject private var similarityVM: SimilarityViewModel
+    
+    @Environment(\.scenePhase) private var scenePhase
 
     // MARK: - Init
 
@@ -83,43 +85,51 @@ struct PurgatorioApp: App {
                     Spacer()
 
                     // Barra Inferior de Combate
-                    HStack {
-                        // Undo Button
-                        Button(action: {
-                            photoVM.undoLastSwipe()
-                        }) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Circle().fill(Color.gray.opacity(0.3)))
-                        }
-                        .disabled(photoVM.historyStack.isEmpty)
-                        .opacity(photoVM.historyStack.isEmpty ? 0.3 : 1.0)
-
-                        Spacer()
-
-                        // Shredder Button
-                        if !photoVM.shredderQueue.isEmpty {
+                    if !photoVM.historyStack.isEmpty || !photoVM.shredderQueue.isEmpty {
+                        HStack {
+                            // Undo Button
                             Button(action: {
-                                Task { await photoVM.executeShredder() }
+                                photoVM.undoLastSwipe()
                             }) {
-                                Text("Triturar (\(photoVM.shredderQueue.count))")
-                                    .font(.headline)
-                                    .bold()
+                                Image(systemName: "arrow.uturn.backward")
+                                    .font(.title2.weight(.medium))
+                                    .foregroundColor(photoVM.historyStack.isEmpty ? .gray : .white)
+                                    .frame(width: 50, height: 50)
+                                    .background(Circle().fill(Color.white.opacity(0.1)))
+                            }
+                            .disabled(photoVM.historyStack.isEmpty)
+    
+                            Spacer()
+    
+                            // Shredder Button
+                            if !photoVM.shredderQueue.isEmpty {
+                                Button(action: {
+                                    Task { await photoVM.executeShredder() }
+                                }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "trash.fill")
+                                        Text("Triturar (\(photoVM.shredderQueue.count))")
+                                            .monospacedDigit()
+                                    }
+                                    .font(.headline.bold())
                                     .foregroundColor(.white)
                                     .padding(.vertical, 14)
                                     .padding(.horizontal, 28)
                                     .background(Capsule().fill(Color.red))
                                     .shadow(color: .red.opacity(0.4), radius: 8, y: 4)
+                                }
+                                .transition(.scale.combined(with: .opacity))
                             }
-                            .transition(.scale)
                         }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(30)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16) // Respeta Safe Area subyacente
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.shredderQueue.count)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.historyStack.count)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 32)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.shredderQueue.count)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.historyStack.count)
                 }
             }
             .environmentObject(photoVM)
@@ -127,6 +137,13 @@ struct PurgatorioApp: App {
             .task {
                 await oauth.restoreSession()
                 photoVM.start()
+            }
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .active {
+                    photoVM.refreshAppleGallery()
+                } else if newPhase == .background {
+                    // Posible liberación de texturas si fuera necesario
+                }
             }
         }
     }
