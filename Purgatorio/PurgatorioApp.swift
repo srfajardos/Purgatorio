@@ -11,7 +11,6 @@ struct PurgatorioApp: App {
 
     @StateObject private var photoVM: PhotoLibraryViewModel
     @StateObject private var queueManager: PurgatorioQueueManager
-    @StateObject private var similarityVM: SimilarityViewModel
     
     @Environment(\.scenePhase) private var scenePhase
 
@@ -43,15 +42,10 @@ struct PurgatorioApp: App {
             journaler: .shared
         )
 
-        let similarityVM = SimilarityViewModel(
-            engine:   SimilarityEngine(),
-            provider: newlyCreatedProvider
-        )
 
         // Assign to @StateObject backing storage
         _queueManager = StateObject(wrappedValue: queue)
         _photoVM      = StateObject(wrappedValue: photoVM)
-        _similarityVM = StateObject(wrappedValue: similarityVM)
     }
 
     // MARK: - Scene

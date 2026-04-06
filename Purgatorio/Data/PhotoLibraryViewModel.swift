@@ -208,7 +208,7 @@ public final class PhotoLibraryViewModel: ObservableObject {
             return
         }
         
-        await MainActor.run { state = .loading }
+        await MainActor.run { self.state = .loading }
         do {
             // OOM-SAFE: Solo recuperamos los identificadores
             let result = PHAsset.fetchAssets(with: .image, options: Self.fetchOptions())
@@ -251,18 +251,12 @@ public final class PhotoLibraryViewModel: ObservableObject {
 
         if nextIdx < assets.count {
             currentIndex = nextIdx
-            await MainActor.run {
-                currentImage = nextImage
-                nextImage    = nil
-                state = SessionState.active(currentIndex: nextIdx)
+                self.state = .active(currentIndex: nextIdx)
             }
             await provider.didAdvance(to: nextIdx)
             await loadNext(from: nextIdx)
         } else {
-            await MainActor.run {
-                currentImage = nil
-                nextImage = nil
-                state = SessionState.finished
+                self.state = .finished
             }
         }
     }
