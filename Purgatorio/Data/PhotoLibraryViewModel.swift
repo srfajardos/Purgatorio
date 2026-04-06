@@ -251,11 +251,17 @@ public final class PhotoLibraryViewModel: ObservableObject {
 
         if nextIdx < assets.count {
             currentIndex = nextIdx
+            await MainActor.run {
+                currentImage = nextImage
+                nextImage    = nil
                 self.state = .active(currentIndex: nextIdx)
             }
             await provider.didAdvance(to: nextIdx)
             await loadNext(from: nextIdx)
         } else {
+            await MainActor.run {
+                currentImage = nil
+                nextImage = nil
                 self.state = .finished
             }
         }
