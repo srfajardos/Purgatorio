@@ -84,6 +84,12 @@ public final class PhotoLibraryViewModel: ObservableObject {
     /// Estado de permisos de la librería de fotos (solo aplica a Apple).
     @Published public private(set) var authState: PhotoLibraryAuthState = .notDetermined
 
+    /// Cola de activos de Apple listos para ser eliminados en lote.
+    @Published public var shredderQueue: Set<PHAsset> = []
+
+    /// Historial de índices para funcionalidad de Deshacer (Undo).
+    @Published public var historyStack: [Int] = []
+
     /// Lista de assets disponibles para la sesión actual.
     @Published public private(set) var assets: [PhotoAsset] = []
 
@@ -199,6 +205,8 @@ public final class PhotoLibraryViewModel: ObservableObject {
         nextImage     = nil
         currentIndex  = 0
         decidedIDs    = []
+        historyStack  = []
+        shredderQueue = []
         sessionStats  = SessionStats()
         errorMessage  = nil
         showGooglePurgeButton = false
@@ -233,8 +241,9 @@ public final class PhotoLibraryViewModel: ObservableObject {
         guard let asset = assets[safe: currentIndex] else { return }
         let id = asset.localIdentifier
 
-        // Registrar decisión para no repetir
+        // Registrar decisión e historial
         decidedIDs.insert(id)
+        historyStack.append(currentIndex)
 
         switch action {
         case .destroy:
@@ -242,7 +251,9 @@ public final class PhotoLibraryViewModel: ObservableObject {
 
             switch activeSource {
             case .apple:
-                await destroyAppleAsset(id: id)
+                if let phAsset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject {
+                    shredderQueue.insert(phAsset)
+                }
             case .google:
                 await enqueueGoogleAsset(id: id)
             }
@@ -264,6 +275,53 @@ public final class PhotoLibraryViewModel: ObservableObject {
     /// Shortcut: salvar la foto actual.
     public func rescueCurrent() async {
         await processDecision(.rescue)
+    }
+
+    // MARK: - Public API: Undo & Batch Shredding
+
+    /// Deshace la última acción retornando a la foto anterior y removiéndola de la cola si es necesario.
+    public func undoLastSwipe() {
+        guard let lastIndex = historyStack.popLast() else { return }
+        guard let prevAsset = assets[safe: lastIndex] else { return }
+        
+        let id = prevAsset.localIdentifier
+        decidedIDs.remove(id)
+        
+        if let phAsset = shredderQueue.first(where: { $0.localIdentifier == id }) {
+            shredderQueue.remove(phAsset)
+            sessionStats.destroyed = max(0, sessionStats.destroyed - 1)
+        } else {
+            // Asumimos rescue si no estaba en la cola de Apple
+            sessionStats.rescued = max(0, sessionStats.rescued - 1)
+        }
+        
+        // Retroceder el cursor visual
+        currentIndex = lastIndex
+        Task { [weak self] in
+            guard let self else { return }
+            await provider.didAdvance(to: lastIndex)
+            await loadCurrentAndNext(from: lastIndex)
+        }
+    }
+
+    /// Ejecuta el borrado masivo de la shredderQueue.
+    public func executeShredder() async {
+        guard !shredderQueue.isEmpty else { return }
+        let assetsToDelete = Array(shredderQueue) as NSFastEnumeration
+        
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.deleteAssets(assetsToDelete)
+            }
+            logger.info("Borrado por lote completado: \(self.shredderQueue.count) fotos")
+            
+            // Vaciar la cola tras éxito
+            shredderQueue.removeAll()
+            
+        } catch {
+            logger.error("Fallo al ejecutar shredder masivo: \(error.localizedDescription)")
+            errorMessage = "No se pudieron borrar las fotos: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Public API: Navigation

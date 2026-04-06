@@ -81,6 +81,45 @@ struct PurgatorioApp: App {
                     }
 
                     Spacer()
+
+                    // Barra Inferior de Combate
+                    HStack {
+                        // Undo Button
+                        Button(action: {
+                            photoVM.undoLastSwipe()
+                        }) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Circle().fill(Color.gray.opacity(0.3)))
+                        }
+                        .disabled(photoVM.historyStack.isEmpty)
+                        .opacity(photoVM.historyStack.isEmpty ? 0.3 : 1.0)
+
+                        Spacer()
+
+                        // Shredder Button
+                        if !photoVM.shredderQueue.isEmpty {
+                            Button(action: {
+                                Task { await photoVM.executeShredder() }
+                            }) {
+                                Text("Triturar (\(photoVM.shredderQueue.count))")
+                                    .font(.headline)
+                                    .bold()
+                                    .foregroundColor(.white)
+                                    .padding(.vertical, 14)
+                                    .padding(.horizontal, 28)
+                                    .background(Capsule().fill(Color.red))
+                                    .shadow(color: .red.opacity(0.4), radius: 8, y: 4)
+                            }
+                            .transition(.scale)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 32)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.shredderQueue.count)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.historyStack.count)
                 }
             }
             .environmentObject(photoVM)
