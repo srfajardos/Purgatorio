@@ -71,12 +71,25 @@ public struct MilestoneEvent: Identifiable, Sendable {
     public let message: String
 }
 
+// MARK: - SessionState
+
+/// Máquina de Estados Finita (FSM) para el ciclo de vida de la sesión.
+public enum SessionState: Equatable, Sendable {
+    case initializing
+    case loading
+    case active(currentIndex: Int)
+    case finished
+}
+
 // MARK: - PhotoLibraryViewModel
 
 @MainActor
 public final class PhotoLibraryViewModel: ObservableObject {
 
     // MARK: - Published State
+
+    /// Estado FSM de la sesión actual.
+    @Published public private(set) var state: SessionState = .initializing
 
     /// Fuente de datos activa. Cambiarla resetea la sesión completa.
     @Published public var activeSource: PhotoSourceType = .apple
@@ -99,9 +112,6 @@ public final class PhotoLibraryViewModel: ObservableObject {
     /// Imagen del siguiente asset (pre-cargada para transición sin latencia).
     @Published public private(set) var nextImage: UIImage?
 
-    /// Estado de carga en progreso.
-    @Published public private(set) var isLoading: Bool = false
-
     /// Error presentable al usuario.
     @Published public private(set) var errorMessage: String?
 
@@ -117,9 +127,6 @@ public final class PhotoLibraryViewModel: ObservableObject {
     /// Evento de hito activo (25, 50, 75…). nil = sin hito pendiente.
     /// El view lo consume para mostrar un toast/banner temporal.
     @Published public var activeMilestone: MilestoneEvent?
-
-    /// `true` tras terminar la sesión → muestra pantalla de resumen.
-    @Published public var showSessionSummary: Bool = false
 
     // MARK: - Dependencies
 
@@ -211,6 +218,7 @@ public final class PhotoLibraryViewModel: ObservableObject {
         currentImage  = nil
         nextImage     = nil
         currentIndex  = 0
+        state         = .initializing
         decidedIDs    = []
         historyStack  = []
         shredderQueue = []
@@ -315,9 +323,9 @@ public final class PhotoLibraryViewModel: ObservableObject {
             sessionStats.rescued = max(0, sessionStats.rescued - 1)
         }
         
-        // Retroceder el cursor visual y forzar la recarga
         currentIndex = lastIndex
         currentImage = nil // Invalidar inmediatamente para forzar el refresh
+        state = .active(currentIndex: lastIndex)
         let targetSize = UIScreen.main.bounds.size
         Task { [weak self] in
             guard let self else { return }
@@ -420,23 +428,22 @@ public final class PhotoLibraryViewModel: ObservableObject {
     }
 
     private func loadAppleLibrary() async {
-        await MainActor.run { isLoading = true }
-
-        assetStreamTask = Task { [weak self] in
-            guard let self else { return }
-            for await asset in await provider.assetStream() {
-                await MainActor.run { self.assets.append(asset) }
-            }
-        }
+        await MainActor.run { state = .loading }
 
         do {
-            try await provider.loadLibrary()
-            await MainActor.run { isLoading = false }
-            await loadCurrentAndNext(from: 0)
+            let initialBatch = try await provider.loadLibrary()
+            await MainActor.run { self.assets = initialBatch }
+            
+            if initialBatch.isEmpty {
+                await MainActor.run { self.state = .finished }
+            } else {
+                await loadCurrentAndNext(from: 0)
+                await MainActor.run { self.state = .active(currentIndex: 0) }
+            }
         } catch {
             await MainActor.run {
-                errorMessage = error.localizedDescription
-                isLoading = false
+                self.errorMessage = error.localizedDescription
+                self.state = .finished
             }
         }
     }
@@ -458,27 +465,24 @@ public final class PhotoLibraryViewModel: ObservableObject {
                     return
                 }
 
-                await MainActor.run { isLoading = true }
+                await MainActor.run { state = .loading }
 
-                // TODO: Implementar GooglePhotosProvider que liste fotos desde la API
-                // Por ahora, Google Photos usa los mismos assets de PhotoKit como proxy,
-                // con la diferencia de que el pipeline de destrucción es upload en vez de delete.
-                try await provider.loadLibrary()
+                // Implementar GooglePhotosProvider en el futuro
+                let initialBatch = try await provider.loadLibrary()
+                
+                await MainActor.run { self.assets = initialBatch }
 
-                assetStreamTask = Task { [weak self] in
-                    guard let self else { return }
-                    for await asset in await provider.assetStream() {
-                        await MainActor.run { self.assets.append(asset) }
-                    }
+                if initialBatch.isEmpty {
+                    await MainActor.run { self.state = .finished }
+                } else {
+                    await loadCurrentAndNext(from: 0)
+                    await MainActor.run { self.state = .active(currentIndex: 0) }
                 }
-
-                await MainActor.run { isLoading = false }
-                await loadCurrentAndNext(from: 0)
 
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
+                    self.errorMessage = error.localizedDescription
+                    self.state = .finished
                 }
             }
         }
@@ -582,18 +586,22 @@ public final class PhotoLibraryViewModel: ObservableObject {
                 // Promover nextImage → currentImage para latencia cero
                 currentImage = nextImage
                 nextImage    = nil
+                state = .active(currentIndex: nextIdx)
             }
             await provider.didAdvance(to: nextIdx)
             // Cargar la siguiente en background
             await loadNext(from: nextIdx)
         } else {
             // Fin de la sesión
-            logger.info("Sesión completada. Destroyed=\(self.sessionStats.destroyed) Rescued=\(self.sessionStats.rescued) Bytes=\(self.sessionStats.formattedBytes)")
-            if activeSource == .google && sessionStats.destroyed > 0 {
-                showGooglePurgeButton = true
+            logger.info("Sesión completada.")
+            await MainActor.run {
+                if self.activeSource == .google && self.sessionStats.destroyed > 0 {
+                    self.showGooglePurgeButton = true
+                }
+                self.currentImage = nil
+                self.nextImage = nil
+                self.state = .finished
             }
-            // Mostrar pantalla de resumen
-            showSessionSummary = true
         }
     }
 

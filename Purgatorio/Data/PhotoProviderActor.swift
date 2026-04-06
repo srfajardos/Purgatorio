@@ -295,7 +295,7 @@ public actor PhotoProviderActor {
     // MARK: - Public API: Library Loading
 
     /// Carga el catálogo de fotos. Requiere estado `.authorized` o `.limited`.
-    public func loadLibrary() async throws {
+    public func loadLibrary() async throws -> [PhotoAsset] {
         let state = await currentAuthState()
         guard state == .authorized || state == .limited else {
             throw PhotoLibraryError.unauthorized(state: state)
@@ -306,15 +306,20 @@ public actor PhotoProviderActor {
         logger.info("loadLibrary: iniciando fetch…")
         let result = PHAsset.fetchAssets(with: .image, options: Self.fetchOptions)
         self.fetchResult = result
-        logger.info("loadLibrary: \(result.count) assets encontrados.")
+        let count = result.count
+        logger.info("loadLibrary: \(count) assets encontrados.")
 
-        for i in 0 ..< result.count {
+        var initialBatch: [PhotoAsset] = []
+        initialBatch.reserveCapacity(count)
+        
+        for i in 0 ..< count {
             autoreleasepool {
                 let asset = result.object(at: i)
-                self.assetContinuation?.yield(PhotoAsset(from: asset, index: i))
+                initialBatch.append(PhotoAsset(from: asset, index: i))
             }
         }
         await updateLookaheadCache(around: 0)
+        return initialBatch
     }
 
     // MARK: - Public API: Asset Stream

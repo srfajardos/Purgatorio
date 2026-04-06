@@ -69,17 +69,34 @@ struct PurgatorioApp: App {
 
                     Spacer()
 
-                    if photoVM.isLoading {
+                    switch photoVM.state {
+                    case .initializing, .loading:
                         ProgressView("Conectando con la galería...")
                             .tint(.white)
                             .foregroundStyle(.white)
-                    } else if !photoVM.assets.isEmpty {
+                    case .active:
                         DestructiveSwipeView(provider: provider, predictor: predictor)
                             .padding()
-                    } else {
-                        Text("No hay fotos para triturar")
-                            .font(.headline)
-                            .foregroundStyle(.gray)
+                    case .finished:
+                        VStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 48))
+                                .foregroundColor(.green)
+                            Text("Mazo exhausto")
+                                .font(.title2.bold())
+                                .foregroundColor(.white)
+                            if !photoVM.shredderQueue.isEmpty {
+                                Text("Aún tienes \(photoVM.shredderQueue.count) fotos esperando la trituradora.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .multilineTextAlignment(.center)
+                            } else {
+                                Text("No hay más fotos por revisar.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        .padding()
                     }
 
                     Spacer()
