@@ -100,6 +100,7 @@ public struct DestructiveSwipeView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                     .clipped()
             } else {
                 RoundedRectangle(cornerRadius: 16)

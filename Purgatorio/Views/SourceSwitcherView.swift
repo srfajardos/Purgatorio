@@ -168,17 +168,17 @@ public struct RescueButton: View {
         Button {
             Task { await vm.rescueCurrent() }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "heart.circle.fill")
-                    .font(.title3)
+                    .font(.title2)
                 Text("Salvar")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title2.bold())
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(.green.gradient, in: Capsule())
+            .padding(.horizontal, 32)
+            .padding(.vertical, 16)
+            .background(Color.green.opacity(0.9), in: Capsule())
             .foregroundStyle(.white)
-            .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
+            .shadow(color: .green.opacity(0.4), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Salvar esta foto")

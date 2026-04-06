@@ -220,10 +220,23 @@ public final class PhotoLibraryViewModel: ObservableObject {
         start()
     }
 
-    /// Cambia la fuente activa y resetea la sesión. Evita el didSet de activeSource.
+    /// Cambia la fuente activa y resetea la sesión si es necesario.
     public func switchSource(to newSource: PhotoSourceType) {
         guard activeSource != newSource else { return }
         let oldVal = activeSource
+        
+        // Bloqueo temporal para la integración en desarrollo (evita vaciar el array actual)
+        if newSource == .google {
+            activeSource = .google
+            Task { @MainActor in
+                // Revierte visualmente y bloquea sin ejecutar resetSession
+                try? await Task.sleep(for: .seconds(0.05))
+                self.activeSource = .apple
+            }
+            logger.info("Cambio a Google interceptado. Se mantuvo la galería intacta.")
+            return
+        }
+
         activeSource = newSource
         resetSession()
         logger.info("Fuente cambiada: \(oldVal.rawValue) → \(self.activeSource.rawValue)")
@@ -381,21 +394,26 @@ public final class PhotoLibraryViewModel: ObservableObject {
     // MARK: - Private: Apple Session
 
     private func startAppleSession() {
-        guard authStreamTask == nil else { return }
-
-        authStreamTask = Task { [weak self] in
-            guard let self else { return }
-            for await state in await provider.authorizationStateStream() {
-                await MainActor.run { self.authState = state }
-                switch state {
-                case .authorized, .limited:
-                    await self.loadAppleLibrary()
-                case .denied(let reason):
-                    await MainActor.run { self.errorMessage = reason }
-                case .restricted:
-                    await MainActor.run { self.errorMessage = "Acceso restringido." }
-                case .notDetermined:
-                    break
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if status == .authorized || status == .limited {
+            authState = (status == .authorized) ? .authorized : .limited
+            Task { await self.loadAppleLibrary() }
+        } else {
+            guard authStreamTask == nil else { return }
+            authStreamTask = Task { [weak self] in
+                guard let self else { return }
+                for await state in await provider.authorizationStateStream() {
+                    await MainActor.run { self.authState = state }
+                    switch state {
+                    case .authorized, .limited:
+                        await self.loadAppleLibrary()
+                    case .denied(let reason):
+                        await MainActor.run { self.errorMessage = reason }
+                    case .restricted:
+                        await MainActor.run { self.errorMessage = "Acceso restringido." }
+                    case .notDetermined:
+                        break
+                    }
                 }
             }
         }
