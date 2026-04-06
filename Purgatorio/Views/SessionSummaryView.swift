@@ -90,7 +90,7 @@ public struct SessionSummaryView: View {
                     }
 
                     Button {
-                        vm.showSessionSummary = false
+                        vm.resetSession()
                         dismiss()
                     } label: {
                         Text("Cerrar")
@@ -108,7 +108,7 @@ public struct SessionSummaryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Listo") {
-                        vm.showSessionSummary = false
+                        vm.resetSession()
                         dismiss()
                     }
                 }

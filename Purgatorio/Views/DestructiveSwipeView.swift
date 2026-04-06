@@ -167,12 +167,15 @@ public struct DestructiveSwipeView: View {
                     // Pre-cargar textura en el shredder (si hay asset visible)
                     let currentIdx = await MainActor.run { vm.currentIndex }
                     let assets     = await MainActor.run { vm.assets }
-                    guard let asset = assets[safe: currentIdx] else { return }
+                    guard let id = assets[safe: currentIdx] else { return }
 
-                    if let texWrapper = await provider.loadTexture(for: asset) {
-                        let frame = await MainActor.run { cardGlobalFrame }
-                        await MainActor.run {
-                            GlobalShredderManager.shared.prepare(texture: texWrapper.texture, from: frame)
+                    if let phAsset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject {
+                        let photoAsset = PhotoAsset(from: phAsset, index: currentIdx)
+                        if let cgImage = await provider.loadCGImage(for: photoAsset) {
+                            let frame = await MainActor.run { cardGlobalFrame }
+                            await MainActor.run {
+                                GlobalShredderManager.shared.prepare(cgImage: cgImage, from: frame)
+                            }
                         }
                     }
                 },
@@ -185,10 +188,15 @@ public struct DestructiveSwipeView: View {
     // MARK: - Quality Profile Computation
 
     private func computeQualityProfile() async {
-        guard let asset = vm.assets[safe: vm.currentIndex] else { return }
-        if let texWrapper = await provider.loadTexture(for: asset) {
-            let profile = PhotoQualityProfile.from(texture: texWrapper.texture)
-            await MainActor.run { qualityProfile = profile }
+        guard vm.assets.indices.contains(vm.currentIndex) else { return }
+        let id = vm.assets[vm.currentIndex]
+        
+        if let phAsset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject {
+            let photoAsset = PhotoAsset(from: phAsset, index: vm.currentIndex)
+            if let cgImage = await provider.loadCGImage(for: photoAsset) {
+                let profile = PhotoQualityProfile.from(cgImage: cgImage)
+                await MainActor.run { qualityProfile = profile }
+            }
         }
     }
 
@@ -209,17 +217,22 @@ public struct DestructiveSwipeView: View {
             guard vm.assets.indices.contains(vm.currentIndex) else { return }
 
             let targetSize = UIScreen.main.bounds.size
-            let asset = vm.assets[vm.currentIndex]
-            let texWrapper = await provider.loadTexture(for: asset, targetSize: targetSize)
+            let id = vm.assets[vm.currentIndex]
+            
+            var cgImage: CGImage?
+            if let phAsset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject {
+                let photoAsset = PhotoAsset(from: phAsset, index: vm.currentIndex)
+                cgImage = await provider.loadCGImage(for: photoAsset, targetSize: targetSize)
+            }
 
             await MainActor.run {
                 // 1. Ocultar carta SwiftUI
                 withAnimation(.easeOut(duration: 0.05)) { cardOpacity = 0 }
 
                 // 2. Metal shredder — UX idéntica para Apple y Google
-                if let texWrapper {
+                if let cgImage {
                     GlobalShredderManager.shared.triggerExplosion(
-                        texture: texWrapper.texture, from: cardGlobalFrame, velocity: norm
+                        cgImage: cgImage, from: cardGlobalFrame, velocity: norm
                     )
                 }
 

@@ -50,10 +50,10 @@ public struct PhotoCardView: View {
 
     @ViewBuilder
     private var photoStackView: some View {
-        if viewModel.isLoading && viewModel.assets.isEmpty {
+        if viewModel.state == .loading || viewModel.state == .initializing {
             ProgressView("Cargando librería…")
                 .tint(.white)
-        } else if viewModel.assets.isEmpty {
+        } else if viewModel.state == .finished {
             Text("No hay fotos disponibles.")
                 .foregroundStyle(.secondary)
         } else {

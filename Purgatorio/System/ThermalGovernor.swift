@@ -30,6 +30,7 @@ import os.log
 /// Usa el macro `@Observable` (iOS 17+) para integración nativa con SwiftUI.
 /// Para observers en actores de Swift usa `stateStream()`.
 
+@MainActor
 public final class ThermalGovernor: NSObject, ObservableObject {
 
     // MARK: - Singleton
@@ -149,7 +150,6 @@ public final class ThermalGovernor: NSObject, ObservableObject {
         }
     }
 
-    @MainActor
     private func applyNewThermalState(_ newState: ProcessInfo.ThermalState) {
         guard newState != thermalState else { return }
         let previous = thermalState

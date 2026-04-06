@@ -46,9 +46,9 @@ public struct PhotoQualityProfile: Sendable {
     /// Lee una muestra de 4×4 píxeles del centro de la textura para estimar
     /// el brillo medio y la varianza (proxy de ruido).
     /// La resolución se normaliza contra un máximo razonable de 12MP (4000×3000).
-    public static func from(texture: any MTLTexture) -> PhotoQualityProfile {
-        let width  = texture.width
-        let height = texture.height
+    public static func from(cgImage: CGImage) -> PhotoQualityProfile {
+        let width  = cgImage.width
+        let height = cgImage.height
 
         // Resolución normalizada (12MP = 1.0)
         let totalPixels = Float(width * height)
@@ -58,18 +58,12 @@ public struct PhotoQualityProfile: Sendable {
         let sampleSize = 4
         let originX    = max(0, width / 2 - sampleSize / 2)
         let originY    = max(0, height / 2 - sampleSize / 2)
-        let region     = MTLRegion(
-            origin: MTLOrigin(x: originX, y: originY, z: 0),
-            size:   MTLSize(width: min(sampleSize, width), height: min(sampleSize, height), depth: 1)
-        )
-
+        
         var pixels = [UInt8](repeating: 0, count: sampleSize * sampleSize * 4)
-        texture.getBytes(
-            &pixels,
-            bytesPerRow: sampleSize * 4,
-            from: region,
-            mipmapLevel: 0
-        )
+        if let cropped = cgImage.cropping(to: CGRect(x: originX, y: originY, width: sampleSize, height: sampleSize)),
+           let context = CGContext(data: &pixels, width: sampleSize, height: sampleSize, bitsPerComponent: 8, bytesPerRow: sampleSize * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+            context.draw(cropped, in: CGRect(x: 0, y: 0, width: sampleSize, height: sampleSize))
+        }
 
         // Calcular luminancia media y varianza
         var sum:     Float = 0
@@ -98,6 +92,7 @@ public struct PhotoQualityProfile: Sendable {
 
 // MARK: - HapticAudioEngine
 
+@MainActor
 public final class HapticAudioEngine {
 
     // MARK: - Singleton

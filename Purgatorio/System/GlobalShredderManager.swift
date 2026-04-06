@@ -26,6 +26,7 @@ public final class GlobalShredderManager: NSObject, ObservableObject {
     // MARK: - Metal Resources
     private let metalDevice: (any MTLDevice)?
     private let commandQueue: (any MTLCommandQueue)?
+    private var textureLoader: MTKTextureLoader?
     private var pipelineState: (any MTLRenderPipelineState)?
 
     // MARK: - Overlay (weak: SwiftUI owns the UIViewRepresentable lifecycle)
@@ -59,6 +60,9 @@ public final class GlobalShredderManager: NSObject, ObservableObject {
         let device       = MTLCreateSystemDefaultDevice()
         self.metalDevice = device
         self.commandQueue = device?.makeCommandQueue()
+        if let device {
+            self.textureLoader = MTKTextureLoader(device: device)
+        }
         super.init()
         if let device { buildPipeline(device: device) }
         else { logger.critical("MTLCreateSystemDefaultDevice retornó nil.") }
@@ -73,16 +77,25 @@ public final class GlobalShredderManager: NSObject, ObservableObject {
     /// y solo necesita flip `isPaused` → latencia del primer frame ≈ 0.
     ///
     /// Si el swipe no ocurre (falso positivo), los recursos se descartan silenciosamente.
-    public func prepare(texture: any MTLTexture, from rect: CGRect) {
-        guard let device = metalDevice else { return }
-        let density = MeshDensity.current(for: ThermalGovernor.shared.thermalState)
-        preparedTexture     = texture
-        preparedVertexBuf   = ShredderMeshBuilder.build(
-            density: density, sourceRect: rect,
-            screenSize: UIScreen.main.bounds.size, device: device
-        )
-        preparedVertexCount = density.vertexCount
-        logger.debug("Shredder pre-calentado: \(density.rawValue)² mesh ready.")
+    public func prepare(cgImage: CGImage, from rect: CGRect) async {
+        guard let device = metalDevice, let loader = textureLoader else { return }
+        
+        let options: [MTKTextureLoader.Option: Any] = [
+            .generateMipmaps: false,
+            .SRGB: false,
+            .textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue)
+        ]
+        
+        if let texture = try? await loader.newTexture(cgImage: cgImage, options: options) {
+            let density = MeshDensity.current(for: ThermalGovernor.shared.thermalState)
+            self.preparedTexture     = texture
+            self.preparedVertexBuf   = ShredderMeshBuilder.build(
+                density: density, sourceRect: rect,
+                screenSize: UIScreen.main.bounds.size, device: device
+            )
+            self.preparedVertexCount = density.vertexCount
+            logger.debug("Shredder pre-calentado: \(density.rawValue)² mesh ready.")
+        }
     }
 
     // MARK: - Public API: Trigger
@@ -96,7 +109,7 @@ public final class GlobalShredderManager: NSObject, ObservableObject {
     /// del MTKView para alineación sub-frame con ProMotion (≤ 8.33ms de desfase
     /// entre el pulso háptico y el primer frame del shader).
     public func triggerExplosion(
-        texture: any MTLTexture,
+        cgImage: CGImage,
         from rect: CGRect,
         velocity: CGVector
     ) {
@@ -117,16 +130,31 @@ public final class GlobalShredderManager: NSObject, ObservableObject {
             preparedTexture   = nil
             preparedVertexBuf = nil
             logger.info("Explosión con textura pre-calentada.")
+            self.startAnimation()
         } else {
             let density = MeshDensity.current(for: ThermalGovernor.shared.thermalState)
-            currentTexture = texture
             vertexBuffer   = ShredderMeshBuilder.build(
                 density: density, sourceRect: rect,
                 screenSize: UIScreen.main.bounds.size, device: device
             )
             vertexCount = density.vertexCount
+            
+            let options: [MTKTextureLoader.Option: Any] = [
+                .generateMipmaps: false,
+                .SRGB: false,
+                .textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue)
+            ]
+            textureLoader?.newTexture(cgImage: cgImage, options: options) { [weak self] tex, _ in
+                guard let self = self, let tex = tex else { return }
+                Task { @MainActor in
+                    self.currentTexture = tex
+                    self.startAnimation()
+                }
+            }
         }
+    }
 
+    private func startAnimation() {
         // Activar rendering
         isActive = true
         mtkView?.isPaused = false

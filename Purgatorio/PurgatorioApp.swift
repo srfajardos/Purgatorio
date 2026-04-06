@@ -6,7 +6,6 @@ struct PurgatorioApp: App {
 
     // MARK: - Root Dependencies
 
-    private let oauth = GoogleOAuthService()
     private let provider: PhotoProviderActor
     private let predictor = IntentPredictor()
 
@@ -37,12 +36,11 @@ struct PurgatorioApp: App {
         // 3. Global Managers
         let queue = PurgatorioQueueManager(container: container)
 
-        // 4. ViewModels
+        // 4. ViewModels (MODO MVP: Sin dependencias de Google)
         let photoVM = PhotoLibraryViewModel(
-            provider: newlyCreatedProvider,
-            queue:    queue,
-            uploader: PurgatoryBatchUploader(oauth: oauth, queue: queue),
-            oauth:    oauth
+            provider:  newlyCreatedProvider,
+            queue:     queue,
+            journaler: .shared
         )
 
         let similarityVM = SimilarityViewModel(
@@ -64,9 +62,9 @@ struct PurgatorioApp: App {
                 Color.black.ignoresSafeArea()
 
                 VStack {
-                    SourceSwitcherView()
-                        .padding(.top)
-
+                    // MODO MVP: SourceSwitcherView eliminado. 
+                    // El usuario opera directamente sobre la librería local.
+                    
                     Spacer()
 
                     switch photoVM.state {
@@ -74,9 +72,56 @@ struct PurgatorioApp: App {
                         ProgressView("Conectando con la galería...")
                             .tint(.white)
                             .foregroundStyle(.white)
+                            
+                    case .recoveringPendingShreds(let count):
+                        VStack(spacing: 20) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(.orange)
+                            
+                            VStack(spacing: 8) {
+                                Text("Recuperación de Crashing")
+                                    .font(.title2.bold())
+                                    .foregroundColor(.white)
+                                Text("Se encontraron \(count) fotos que quedaron a medias en la trituradora.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(.horizontal)
+
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    photoVM.discardRecovery()
+                                }) {
+                                    Text("Descartar")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 24)
+                                        .background(Capsule().stroke(Color.gray, lineWidth: 1))
+                                }
+                                
+                                Button(action: {
+                                    Task { await photoVM.resumeShredderRecovery() }
+                                }) {
+                                    Text("Triturar Ahora")
+                                        .font(.headline.bold())
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 24)
+                                        .background(Capsule().fill(Color.orange))
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 25).fill(Color.white.opacity(0.05)))
+                        .padding()
+                        
                     case .active:
                         DestructiveSwipeView(provider: provider, predictor: predictor)
                             .padding()
+                            
                     case .finished:
                         VStack(spacing: 8) {
                             Image(systemName: "checkmark.circle.fill")
@@ -121,7 +166,7 @@ struct PurgatorioApp: App {
                             // Shredder Button
                             if !photoVM.shredderQueue.isEmpty {
                                 Button(action: {
-                                    Task { await photoVM.executeShredder() }
+                                    Task { await photoVM.executePurge() }
                                 }) {
                                     HStack(spacing: 8) {
                                         Image(systemName: "trash.fill")
@@ -143,7 +188,7 @@ struct PurgatorioApp: App {
                         .background(.ultraThinMaterial)
                         .cornerRadius(30)
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 16) // Respeta Safe Area subyacente
+                        .padding(.bottom, 16)
                         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.shredderQueue.count)
                         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: photoVM.historyStack.count)
                     }
@@ -152,14 +197,12 @@ struct PurgatorioApp: App {
             .environmentObject(photoVM)
             .environmentObject(similarityVM)
             .task {
-                await oauth.restoreSession()
+                // MODO MVP: Carga directa de librería local.
                 photoVM.start()
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 if newPhase == .active {
                     photoVM.refreshAppleGallery()
-                } else if newPhase == .background {
-                    // Posible liberación de texturas si fuera necesario
                 }
             }
         }

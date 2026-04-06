@@ -18,8 +18,6 @@
 //
 
 import Photos
-@preconcurrency import MetalKit
-@preconcurrency import Metal
 import UIKit
 import os.log
 
@@ -83,34 +81,6 @@ public struct PhotoPair: Sendable {
     }
 }
 
-/// Wrapper estructural @unchecked Sendable para texturas de Metal.
-/// Seguro dado que las texturas inicializadas no mutan su memoria backend de forma conflictiva.
-public struct SendableTexture: @unchecked Sendable {
-    public let texture: any MTLTexture
-    public init(_ texture: any MTLTexture) {
-        self.texture = texture
-    }
-}
-
-/// Par de texturas Metal — el doble buffer primario del pipeline de renderizado.
-///
-/// `@unchecked Sendable` es seguro: `MTLTexture` es thread-safe por diseño de Metal.
-/// Las instancias son inmutables tras la creación.
-public final class TexturePair: @unchecked Sendable {
-    public let idA: String
-    public let textureA: SendableTexture?
-    public let idB: String
-    public let textureB: SendableTexture?
-
-    /// `true` cuando ambas texturas están en memoria GPU y listas para el shader.
-    public var isComplete: Bool { textureA != nil && textureB != nil }
-
-    init(idA: String, textureA: SendableTexture?,
-         idB: String, textureB: SendableTexture?) {
-        self.idA = idA; self.textureA = textureA
-        self.idB = idB; self.textureB = textureB
-    }
-}
 
 // MARK: - PhotoProviderActor
 
@@ -135,22 +105,22 @@ public actor PhotoProviderActor {
     // MARK: - Metal Resources (init-time, inmutables)
 
     /// Dispositivo Metal del sistema. `nil` en simulador sin GPU.
-    private let metalDevice: (any MTLDevice)?
+    
 
     /// Loader que sube CGImage al buffer GPU. Hilo-seguro por diseño de MetalKit.
-    private let textureLoader: MTKTextureLoader?
+    
 
     // MARK: - Texture LRU Cache
 
     /// Texturas GPU residentes, indexadas por `localIdentifier`.
-    private var textureCache: [String: any MTLTexture] = [:]
+    private var cgImageCache: [String: CGImage] = [:]
 
     /// Límite de texturas GPU en cache. Una textura 390×844 BGRA = ~1.3 MB.
     /// 30 texturas ≈ 40 MB — presupuesto conservador para dispositivos con 4 GB RAM.
-    private let maxTextureCacheSize: Int
+    private let maxCacheSize: Int
 
     /// Cola de acceso más reciente → frente = candidato a evición.
-    private var textureLRUOrder: [String] = []
+    private var lruOrder: [String] = []
 
     // MARK: - Screen Metrics (inyectadas desde MainActor en init)
 
@@ -230,30 +200,23 @@ public actor PhotoProviderActor {
 
     /// - Parameters:
     ///   - lookaheadCount: Lookahead base (escala dinámica con velocidad). Default: 5.
-    ///   - maxTextureCacheSize: Máximo de texturas GPU en cache LRU. Default: 30.
+    ///   - maxCacheSize: Máximo de texturas GPU en cache LRU. Default: 30.
     ///   - screenBounds: Tamaño de pantalla en puntos. Pasar desde @MainActor.
     ///   - screenScale: Escala de pantalla (@1x, @2x, @3x). Pasar desde @MainActor.
     public init(
         lookaheadCount: Int = 5,
-        maxTextureCacheSize: Int = 30,
+        maxCacheSize: Int = 30,
         screenBounds: CGSize = CGSize(width: 393, height: 852),
         screenScale: CGFloat = 3.0
     ) {
         self.lookaheadBase       = max(1, lookaheadCount)
-        self.maxTextureCacheSize = max(5, maxTextureCacheSize)
+        self.maxCacheSize = max(5, maxCacheSize)
         self.screenBounds        = screenBounds
         self.screenScale         = screenScale
         self.cachingManager      = PHCachingImageManager()
         self.cachingManager.allowsCachingHighQualityImages = false
 
-        let device = MTLCreateSystemDefaultDevice()
-        self.metalDevice   = device
-        self.textureLoader = device.map { MTKTextureLoader(device: $0) }
 
-        if device == nil {
-            Logger(subsystem: "com.purgatorio.app", category: "PhotoProviderActor")
-                .critical("MTLCreateSystemDefaultDevice() retornó nil.")
-        }
     }
 
     // MARK: - Public API: Authorization
@@ -346,15 +309,12 @@ public actor PhotoProviderActor {
     /// a la UI solo cuando **ambas** texturas están `MTLTexture`-residentes en GPU.
     ///
     /// - Returns: `TexturePair`. Verifica `pair.isComplete` antes de usarlo en shaders.
-    public func fetchTexturePair(idA: String, idB: String) async -> TexturePair {
+    public func fetchCGImagePair(idA: String, idB: String) async -> (CGImage?, CGImage?) {
         let size = dynamicTextureSize
-        async let texA = loadTexture(identifier: idA, targetSize: size)
-        async let texB = loadTexture(identifier: idB, targetSize: size)
+        async let imgA = loadCGImage(identifier: idA, targetSize: size)
+        async let imgB = loadCGImage(identifier: idB, targetSize: size)
         
-        let sendableA = await texA.map(SendableTexture.init)
-        let sendableB = await texB.map(SendableTexture.init)
-        
-        return await TexturePair(idA: idA, textureA: sendableA, idB: idB, textureB: sendableB)
+        return await (imgA, imgB)
     }
 
     // MARK: - Public API: Single Texture (para DestructiveSwipeView)
@@ -370,14 +330,14 @@ public actor PhotoProviderActor {
     /// - Parameters:
     ///   - asset: El `PhotoAsset` cuya textura se requiere.
     ///   - targetSize: Resolución de la textura. Default: tamaño de pantalla.
-    public func loadTexture(
+    public func loadCGImage(
         for asset: PhotoAsset,
         targetSize: CGSize? = nil
-    ) async -> SendableTexture? {
+    ) async -> CGImage? {
         let size = targetSize ?? CGSize(width: screenBounds.width * screenScale,
                                         height: screenBounds.height * screenScale)
-        let tex = await loadTexture(identifier: asset.localIdentifier, targetSize: size)
-        return tex.map(SendableTexture.init)
+        return await loadCGImage(identifier: asset.localIdentifier, targetSize: size)
+        
     }
 
     // MARK: - Public API: UIImage Pipeline (ruta de análisis — SimilarityEngine)
@@ -459,18 +419,18 @@ public actor PhotoProviderActor {
 
     /// Purga texturas GPU que no pertenecen a `keepingIDs`.
     /// Llama esto en eventos de memory pressure (`UIApplicationDidReceiveMemoryWarningNotification`).
-    public func purgeTextureCache(keepingIDs ids: Set<String> = []) {
-        let evicted = textureLRUOrder.filter { !ids.contains($0) }
-        evicted.forEach { textureCache.removeValue(forKey: $0) }
-        textureLRUOrder.removeAll { !ids.contains($0) }
+    public func purgeCGImageCache(keepingIDs ids: Set<String> = []) {
+        let evicted = lruOrder.filter { !ids.contains($0) }
+        evicted.forEach { cgImageCache.removeValue(forKey: $0) }
+        lruOrder.removeAll { !ids.contains($0) }
         logger.info("TextureCache purgado. Evicted: \(evicted.count). Retenidos: \(ids.count).")
     }
 
     // MARK: - Private: MTLTexture Loading
 
-    private func loadTexture(identifier: String, targetSize: CGSize) async -> (any MTLTexture)? {
+    private func loadCGImage(identifier: String, targetSize: CGSize) async -> CGImage? {
         // 1. Cache hit LRU
-        if let cached = textureCache[identifier] {
+        if let cached = cgImageCache[identifier] {
             touchLRU(identifier)
             return cached
         }
@@ -506,17 +466,8 @@ public actor PhotoProviderActor {
 
         guard let cgImage else { return nil }
 
-        // 3. GPU upload via MTKTextureLoader (Task.detached: bloqueante ~1-5ms, no bloquear el actor)
-        let texture: (any MTLTexture)? = try? await Task.detached(priority: .userInitiated) {
-            try loader.newTexture(cgImage: cgImage, options: [
-                .SRGB              : false,                          // sRGB off: el shader aplica su propio color space
-                .generateMipmaps   : false,                          // Sin mipmaps: scrolling plano, no 3D
-                .textureUsage      : NSNumber(value: MTLTextureUsage.shaderRead.rawValue)
-            ])
-        }.value
-
-        if let texture { cacheTexture(texture, for: identifier) }
-        return texture
+        if let cgImage { cacheCGImage(cgImage, for: identifier) }
+        return cgImage
     }
 
     // MARK: - Private: UIImage Loading (análisis)
@@ -549,20 +500,20 @@ public actor PhotoProviderActor {
 
     // MARK: - Private: Texture LRU Cache Helpers
 
-    private func cacheTexture(_ texture: any MTLTexture, for id: String) {
-        if textureCache[id] == nil, textureLRUOrder.count >= maxTextureCacheSize {
-            let evictID = textureLRUOrder.removeFirst()
-            textureCache.removeValue(forKey: evictID)
+    private func cacheCGImage(_ cgImage: CGImage, for id: String) {
+        if cgImageCache[id] == nil, lruOrder.count >= maxCacheSize {
+            let evictID = lruOrder.removeFirst()
+            cgImageCache.removeValue(forKey: evictID)
             logger.debug("TextureLRU evict: \(evictID)")
         }
-        textureLRUOrder.removeAll { $0 == id }
-        textureCache[id] = texture
-        textureLRUOrder.append(id)
+        lruOrder.removeAll { $0 == id }
+        cgImageCache[id] = texture
+        lruOrder.append(id)
     }
 
     private func touchLRU(_ id: String) {
-        textureLRUOrder.removeAll { $0 == id }
-        textureLRUOrder.append(id)
+        lruOrder.removeAll { $0 == id }
+        lruOrder.append(id)
     }
 
     // MARK: - Private: Lookahead Cache Engine
@@ -620,7 +571,7 @@ public actor PhotoProviderActor {
                 guard let self = self else { return }
                 for i in (index + 1) ... priorityEnd {
                     guard let id = capturedResult?.object(at: i).localIdentifier else { continue }
-                    _ = await self.loadTexture(identifier: id, targetSize: capturedSize)
+                    _ = await self.loadCGImage(identifier: id, targetSize: capturedSize)
                 }
             }
         }

@@ -558,7 +558,7 @@ extension SimilarityEngine {
         from groups: [SimilarityGroup],
         using provider: PhotoProviderActor,
         thermalGovernor: ThermalGovernor = .shared
-    ) async -> [TexturePair] {
+    ) async -> [(CGImage?, CGImage?)] {
 
         // Respetar el presupuesto térmico: en estado crítico limitamos el número de grupos
         // para evitar saturar el bus de memoria GPU durante la carga masiva de texturas.
@@ -571,20 +571,20 @@ extension SimilarityEngine {
 
         // Carga paralela de TexturePairs con TaskGroup.
         // Cada par suspende en fetchTexturePair (double buffer concurrente).
-        return await withTaskGroup(of: (Int, TexturePair).self) { group in
+        return await withTaskGroup(of: (Int, (CGImage?, CGImage?)).self) { group in
             for (index, similarityGroup) in effectiveGroups.enumerated() {
                 guard similarityGroup.assetIDs.count >= 2 else { continue }
                 let idA = similarityGroup.assetIDs[0]
                 let idB = similarityGroup.assetIDs[1]
 
                 group.addTask {
-                    let pair = await provider.fetchTexturePair(idA: idA, idB: idB)
+                    let pair = await provider.fetchCGImagePair(idA: idA, idB: idB)
                     return (index, pair)
                 }
             }
 
             // Reensamblar en orden original (TaskGroup no garantiza orden de llegada)
-            var indexed: [(Int, TexturePair)] = []
+            var indexed: [(Int, (CGImage?, CGImage?))] = []
             for await result in group { indexed.append(result) }
             return indexed.sorted { $0.0 < $1.0 }.map(\.1)
         }
@@ -594,12 +594,12 @@ extension SimilarityEngine {
     ///
     /// Atajo conveniente para cargar el par del torneo actual
     /// sin iterar sobre toda la lista de grupos.
-    public func prepareTexturePair(
+    public func prepareCGImagePair(
         for group: SimilarityGroup,
         using provider: PhotoProviderActor
-    ) async -> TexturePair? {
+    ) async -> (CGImage?, CGImage?)? {
         guard group.assetIDs.count >= 2 else { return nil }
-        return await provider.fetchTexturePair(idA: group.assetIDs[0], idB: group.assetIDs[1])
+        return await provider.fetchCGImagePair(idA: group.assetIDs[0], idB: group.assetIDs[1])
     }
 }
 
