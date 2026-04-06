@@ -208,7 +208,7 @@ public actor PhotoProviderActor {
     /// Elimina la necesidad de ImageIO manual — el sistema elige el decoder óptimo.
     private func makeRenderRequestOptions() -> PHImageRequestOptions {
         let opts = PHImageRequestOptions()
-        opts.deliveryMode          = .fastFormat  // Hardware HEIC/JPEG decode
+        opts.deliveryMode          = .highQualityFormat  // Hardware HEIC/JPEG decode
         opts.resizeMode            = .fast         // Memory-efficient system resize
         opts.isNetworkAccessAllowed = true         // iCloud
         opts.isSynchronous         = false

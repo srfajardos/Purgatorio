@@ -192,6 +192,8 @@ public final class PhotoLibraryViewModel: ObservableObject {
     public func resetSession() {
         assetStreamTask?.cancel()
         authStreamTask?.cancel()
+        assetStreamTask = nil
+        authStreamTask  = nil
         assets        = []
         currentImage  = nil
         nextImage     = nil

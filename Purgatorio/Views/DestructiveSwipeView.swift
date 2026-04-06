@@ -99,7 +99,7 @@ public struct DestructiveSwipeView: View {
             if let image = vm.currentImage {
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .clipped()
             } else {
                 RoundedRectangle(cornerRadius: 16)
@@ -126,16 +126,14 @@ public struct DestructiveSwipeView: View {
                 let speed = hypot(value.velocity.width, value.velocity.height)
                 Task { await provider.didAdvance(to: vm.currentIndex, velocity: Float(speed / 500)) }
 
-                // Rugosidad háptica continua
-                if !rugosityStarted, let profile = qualityProfile {
-                    HapticAudioEngine.shared.startRugositySession(quality: profile)
-                    rugosityStarted = true
-                }
-                if let profile = qualityProfile {
-                    let progress = Float(min(abs(value.translation.width) / velocityThreshold, 1.0))
-                    HapticAudioEngine.shared.updateRugosity(
-                        dragProgress: progress, quality: profile
-                    )
+                // Vibración táctil discreta al cruzar el umbral de decisión para evitar lag
+                if abs(value.translation.width) > 100 {
+                    if !rugosityStarted {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        rugosityStarted = true
+                    }
+                } else {
+                    rugosityStarted = false
                 }
             }
             .onEnded { value in
