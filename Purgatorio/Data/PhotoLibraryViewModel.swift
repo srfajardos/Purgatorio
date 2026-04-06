@@ -254,7 +254,7 @@ public final class PhotoLibraryViewModel: ObservableObject {
             await MainActor.run {
                 currentImage = nextImage
                 nextImage    = nil
-                state = .active(currentIndex: nextIdx)
+                state = SessionState.active(currentIndex: nextIdx)
             }
             await provider.didAdvance(to: nextIdx)
             await loadNext(from: nextIdx)
@@ -262,7 +262,7 @@ public final class PhotoLibraryViewModel: ObservableObject {
             await MainActor.run {
                 currentImage = nil
                 nextImage = nil
-                state = .finished
+                state = SessionState.finished
             }
         }
     }

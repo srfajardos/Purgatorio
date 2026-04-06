@@ -194,8 +194,7 @@ struct PurgatorioApp: App {
                     }
                 }
             }
-            .environmentObject(photoVM)
-            .environmentObject(similarityVM)
+
             .task {
                 // MODO MVP: Carga directa de librería local.
                 photoVM.start()

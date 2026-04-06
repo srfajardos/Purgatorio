@@ -15,7 +15,7 @@ import SwiftUI
 
 public struct SessionSummaryView: View {
 
-    @EnvironmentObject private var vm: PhotoLibraryViewModel
+    let vm: PhotoLibraryViewModel
     @Environment(\.dismiss) private var dismiss
 
     public init() {}
@@ -188,7 +188,7 @@ public struct MilestoneToast: View {
 // MARK: - Preview
 
 #Preview("Summary") {
-    SessionSummaryView()
+    SessionSummaryView(vm: PhotoLibraryViewModel(queue: PurgatorioQueueManager(container: try! PurgatorioQueueManager.makeContainer())))
 }
 
 #Preview("Milestone Toast") {

@@ -435,10 +435,6 @@ public actor PhotoProviderActor {
             return cached
         }
 
-        guard let loader = textureLoader else {
-            logger.error("MTKTextureLoader no disponible — Metal no inicializado correctamente.")
-            return nil
-        }
 
         // 2. Fetch via PHImageManager (Apple hardware decode path)
         guard let phAsset = PHAsset.fetchAssets(
@@ -466,7 +462,7 @@ public actor PhotoProviderActor {
 
         guard let cgImage else { return nil }
 
-        if let cgImage { cacheCGImage(cgImage, for: identifier) }
+        cacheCGImage(cgImage, for: identifier)
         return cgImage
     }
 
@@ -506,8 +502,6 @@ public actor PhotoProviderActor {
             cgImageCache.removeValue(forKey: evictID)
             logger.debug("TextureLRU evict: \(evictID)")
         }
-        lruOrder.removeAll { $0 == id }
-        cgImageCache[id] = texture
         lruOrder.append(id)
     }
 
